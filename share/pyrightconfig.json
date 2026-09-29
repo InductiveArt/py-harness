@@ -1,0 +1,9 @@
+{
+    "typeCheckingMode": "strict",
+    "enableTypeIgnoreComments": true,
+    "reportUnnecessaryTypeIgnoreComment": "error",
+    "reportIgnoreCommentWithoutRule": "error",
+    "reportPrivateLocalImportUsage": "error",
+    "reportAny": "error",
+    "reportExplicitAny": "error"
+}

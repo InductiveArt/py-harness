@@ -1,0 +1,1 @@
+@share/agent-rules.md

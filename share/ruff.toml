@@ -1,0 +1,70 @@
+line-length = 100
+output-format = "concise"
+
+[format]
+line-ending = "lf"
+
+[lint]
+select = [
+  "A",
+  "B",
+  "BLE",
+  "C4",
+  "C90",
+  "E",
+  "ERA",
+  "F",
+  "FIX",
+  "G",
+  "I",
+  "LOG",
+  "N",
+  "PGH004",
+  "PIE",
+  "PT",
+  "RET",
+  "RUF",
+  "S",
+  "SIM",
+  "T20",
+  "TID",
+  "UP",
+  "W",
+]
+ignore = [
+  # Asserts stay legal everywhere: per-file globs in this file resolve against
+  # its own directory, so no pattern here can single out a project's tests.
+  "S101",
+  # Fires on every subprocess call made without a shell, whatever its
+  # arguments, so it carries no signal; a call with a shell is still flagged.
+  "S603",
+]
+
+# Rewriting a relative import as absolute is exact wherever packages are marked
+# by `__init__.py`, so the fix belongs with the ones that preserve behaviour.
+extend-safe-fixes = ["TID252"]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.isort]
+# Every import line names its module and one symbol, so a search for the
+# import finds each importer, and adding an import adds a line.
+force-single-line = true
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[lint.flake8-tidy-imports.banned-api]
+"warnings.deprecated".msg = "Delete the old name and update its callers in the same change."
+"typing_extensions.deprecated".msg = "Delete the old name and update its callers in the same change."
+"pytest.skip".msg = "A skipped test hides a behaviour: make it pass, or delete it with the behaviour."
+"pytest.importorskip".msg = "A skipped test hides a behaviour: make it pass, or delete it with the behaviour."
+"pytest.mark.skip".msg = "A skipped test hides a behaviour: make it pass, or delete it with the behaviour."
+"pytest.mark.skipif".msg = "A skipped test hides a behaviour: make it pass, or delete it with the behaviour."
+"unittest.skip".msg = "A skipped test hides a behaviour: make it pass, or delete it with the behaviour."
+"unittest.skipIf".msg = "A skipped test hides a behaviour: make it pass, or delete it with the behaviour."
+"unittest.skipUnless".msg = "A skipped test hides a behaviour: make it pass, or delete it with the behaviour."
+"pytest.xfail".msg = "A test that ends itself early hides a behaviour: make it pass, or delete it with the behaviour."
+"typing.no_type_check".msg = "An unchecked function hides every type error in it: fix the types, or suppress the one line by its rule."
+"typing_extensions.no_type_check".msg = "An unchecked function hides every type error in it: fix the types, or suppress the one line by its rule."

@@ -1,0 +1,193 @@
+# py-harness
+
+Shared build and health tooling for Python repositories: make targets, tool
+configs, structural rules and the agent skills that describe them, consumed
+by `extend`, `include` and links, never copied.
+
+## Purpose
+
+Every repository gets the same bar from one versioned artifact. Nothing is
+copied into a consuming repository, so nothing drifts out of step with it.
+Upgrading is a version bump, and the lockfile pins the harness together with
+every tool it runs.
+
+## Use
+
+Add it as a dev dependency and point each tool at the files it installs:
+
+```toml
+[dependency-groups]
+dev = ["py-harness"]
+
+[tool.uv.sources]
+py-harness = { git = "https://github.com/InductiveArt/py-harness", tag = "v0.1.0" }
+
+[tool.ruff]
+extend = ".venv/share/py-harness/ruff.toml"
+
+[tool.basedpyright]
+extends = ".venv/share/py-harness/pyrightconfig.json"
+```
+
+```make
+include .venv/share/py-harness/harness.mk
+```
+
+Give the agent the harness's rules and skills, as links into the version it
+runs:
+
+```sh
+echo '@.venv/share/py-harness/agent-rules.md' >> CLAUDE.md
+mkdir -p .github/instructions
+ln -s ../../.venv/share/py-harness/agent-rules.md .github/instructions/py-harness.instructions.md
+mkdir -p .claude/skills
+ln -s ../../.venv/share/py-harness/skills/commenting .claude/skills/commenting
+ln -s ../../.venv/share/py-harness/skills/quality-tooling .claude/skills/quality-tooling
+```
+
+The rules tell the agent to run `make check` after every change and never to
+silence a finding; the skills explain each target and the fix each finding
+expects. Claude Code reads the rules through the import, Copilot in VS Code
+through the link, whichever model it runs; both read the skills from
+`.claude/skills`.
+
+Once `make check` passes, a Stop hook can hold the agent to it: when it stops
+with uncommitted changes and the check fails, the summary goes back to it and
+it keeps working, once per stop. In `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-sync python -m py_harness.stop_gate",
+            "timeout": 900
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+For Copilot's agent in VS Code, the harness ships the same gate in VS Code's
+own hook format. Link it, and enable hooks in the committed workspace settings
+(`"chat.useHooks": true` in `.vscode/settings.json`); VS Code runs workspace
+hooks only in a trusted workspace:
+
+```sh
+mkdir -p .github/hooks
+ln -s ../../.venv/share/py-harness/hooks/vscode.json .github/hooks/py-harness.json
+```
+
+Before the project passes, the hook would send the agent after every existing
+finding instead of the task at hand, so it waits until then.
+
+Run `uv sync` once first: make cannot read the include before `.venv` exists.
+Then `make help` lists every target. The composed ones are named for the
+question each answers: `check` is "did I break what I just touched", `ready`
+is "is this ready to commit". Both fix before they judge, as an agent at work
+wants. `ci` is "does the code as committed pass": the same checks as `ready`,
+never rewriting a file, so what a fix would repair fails instead. Any CI server
+runs it the same way, as a Jenkins stage, a GitHub Actions step or a GitLab
+job:
+
+```sh
+uv sync --locked
+make ci
+```
+
+Each unit keeps its code in `src/` and its tests in `tests/` by default. A unit
+laid out otherwise declares it once, in its own `pyproject.toml`: the code
+under `[tool.py-harness] source`, the tests in pytest's own `testpaths`.
+Integration tests are the ones marked `integration`. The units of a uv
+workspace are its members, then the root when the root is a project.
+`make units` shows them.
+
+A repository's own rules go in `.py-harness/doctor/`, as `rule-*.py`,
+`drift-*.py` or `report-*.py`, and run beside the shared ones. A unit listed in
+`.py-harness/ignore` is covered by no stage, and says so every run. Layer
+contracts go in `[tool.importlinter]`.
+
+## Don't use
+
+- `[tool.coverage]`, `.coveragerc`, `pyrightconfig.json`, `[tool.pyright]`, or
+  `[tool.basedpyright]` anywhere but the root `pyproject.toml`. None of them is
+  ever read, so each would mislead; `wiring` refuses to run beside them.
+- Loosening a shared rule from the repository's own config: an `ignore`, a
+  per-file ignore, a replaced `select`, a raised threshold, or a basedpyright
+  rule or mode below the shared one. `wiring` refuses each of them; the only
+  suppression is an inline, rule-named one, and it fails when it suppresses
+  nothing.
+- pytest settings outside `pyproject.toml` (`pytest.ini`, a `[pytest]` section
+  in `tox.ini`, `[tool:pytest]` in `setup.cfg`), or ones that change which
+  tests run or how they count (`addopts`, `python_files`, `norecursedirs`,
+  `xfail_strict`). `wiring` refuses each.
+- A copied skill directory in place of a link, or a `CLAUDE.md` without the
+  rules import. Either leaves the agent on rules the harness no longer holds;
+  `doctor` fails on both and prints the line or link to add.
+
+## Tradeoff
+
+The harness pins every tool it runs, so a repository cannot move one tool on
+its own; it moves the harness. Coverage is full branch coverage with no
+exclusion comment, so an existing codebase reaches it before `ready` can pass.
+
+## Limits
+
+What no check catches, so a passing run does not claim it:
+
+- A comment's prose. `no-comment-overreach` checks the names a comment
+  mentions, not what its words describe; the `commenting` skill carries the
+  rest.
+- Code only its own tests call. Coverage counts tests, so nothing finds a
+  public function no production path uses.
+- Vulnerable dependencies. `security-scan` is ruff's code-pattern rules;
+  nothing audits the locked dependencies.
+- Secrets in git history. `no-secrets` scans the working tree.
+- Undeclared layers. `boundaries` enforces the contracts a repository
+  declares, and says when there are none.
+- Names read through `vars()`, `__dict__` or `attrgetter`. `no-hidden-names`
+  finds the other ways a name is hidden.
+- A `conftest.py` hook that deselects tests. Settings that do so are refused;
+  code that does is not.
+
+## Invariants
+
+- No stage passes having covered nothing: resolving zero units is an error
+  (`src/py_harness/units.py`).
+- No stage runs on a config that fell back to its defaults: every target whose
+  verdict depends on one runs `wiring` first (`share/harness.mk`).
+- No repository config lowers a shared rule: its ruff and basedpyright settings
+  may only add rules or describe the environment (`src/py_harness/wiring.py`).
+- Every bypass is counted: each run reports how many the repository holds and
+  how many the change since the last commit added (`src/py_harness/suppressions.py`).
+- Every suppression suppresses something: unused `noqa`, unused type ignores,
+  allowlist pragmas that allow nothing, and passing `xfail` tests all fail.
+- The agent reads the rules and skills of the harness version it runs: the
+  rules are imported and each skill is linked, never copied (`drift-agent`).
+- A search for a name finds every use: each symbol is imported under its own
+  name, one per line, and no name is built at runtime (`no-hidden-names`).
+- No file or region exempts itself from a check; only a single line can be
+  suppressed, naming its rule (`no-blanket-exemptions`).
+- Every target, shared rule and checklist item names the test that proves it
+  (`tests/test_ledger.py`).
+- The harness passes its own `make ready` and `make ci`; this repository's
+  `Makefile` includes `share/harness.mk`.
+
+## Pointers
+
+- `share/`: the files tools read by path, installed at `.venv/share/py-harness/`.
+- `src/py_harness/`: the modules each target dispatches to.
+- `src/py_harness/rules/`: the shared doctor rules.
+- `share/agent-rules.md`: the rules every agent session loads.
+- `share/skills/`: the agent skills; `quality-tooling` is the working guide to
+  every target, and `commenting` the rules `no-comment-overreach` enforces in part.
+- `tests/test_ledger.py`: what is proven, and where.
+
+## License
+
+MIT. See `LICENSE`.

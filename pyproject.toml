@@ -1,0 +1,36 @@
+[project]
+name = "py-harness"
+version = "0.1.0"
+description = "Shared build and health tooling for Python repositories. Consumed by extend and include, never copied."
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = [
+  "basedpyright==1.40.1",
+  "coverage==7.16.2",
+  "detect-secrets==1.5.0",
+  "grimp==3.17",
+  "import-linter==2.15",
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "ruff==0.16.9",
+]
+
+[project.entry-points.pytest11]
+py-harness = "py_harness.pytest_plugin"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/py_harness"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"share" = "share/py-harness"
+
+[tool.ruff]
+extend = "share/ruff.toml"
+
+[tool.basedpyright]
+extends = "share/pyrightconfig.json"

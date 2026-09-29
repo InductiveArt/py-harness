@@ -1,0 +1,12 @@
+[tool.coverage.run]
+branch = true
+patch = ["subprocess"]
+
+[tool.coverage.report]
+fail_under = 100
+# Replaces the default list, so no comment can exclude a line.
+exclude_lines = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+  "@(typing\\.)?overload",
+]

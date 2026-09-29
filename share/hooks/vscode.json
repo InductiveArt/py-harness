@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "uv run --no-sync python -m py_harness.stop_gate",
+        "timeout": 900
+      }
+    ]
+  }
+}
