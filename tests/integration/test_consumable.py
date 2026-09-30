@@ -50,8 +50,8 @@ SHARED = (
 )
 
 
-def consumer_environment() -> dict[str, str]:
-    """A consumer's own environment: its venv, nothing from this run, and only cached packages."""
+def consumer_environment(*, online: bool) -> dict[str, str]:
+    """A consumer's own environment: its venv and nothing from this run, offline unless asked."""
     environment = dict(os.environ)
     for inherited in (
         "UV_PROJECT_ENVIRONMENT",
@@ -62,13 +62,17 @@ def consumer_environment() -> dict[str, str]:
         "MAKELEVEL",
     ):
         environment.pop(inherited, None)
-    environment["UV_OFFLINE"] = "1"
+    if not online:
+        environment["UV_OFFLINE"] = "1"
     return environment
 
 
-def run(command: list[str], root: Path) -> subprocess.CompletedProcess[str]:
+def run(
+    command: list[str], root: Path, *, online: bool = False
+) -> subprocess.CompletedProcess[str]:
+    environment = consumer_environment(online=online)
     return subprocess.run(
-        command, cwd=root, env=consumer_environment(), capture_output=True, text=True, check=False
+        command, cwd=root, env=environment, capture_output=True, text=True, check=False
     )
 
 
@@ -87,8 +91,10 @@ def consumer(tmp_path_factory: pytest.TempPathFactory) -> Project:
     created.write("src/consumer/calc.py", "def double(x: int) -> int:\n    return x * 2\n")
     created.write("tests/test_calc.py", TEST_CALC)
     created.git("init", "-q")
+    # A cache filled by `uv sync` alone holds no index listing to lock from, so setting up may
+    # reach the index; every step after it runs offline.
     for bootstrap in (["uv", "lock"], ["uv", "sync"]):
-        completed = run(bootstrap, created.root)
+        completed = run(bootstrap, created.root, online=True)
         assert completed.returncode == 0, completed.stderr
     return created
 
