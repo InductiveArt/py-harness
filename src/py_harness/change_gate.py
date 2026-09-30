@@ -100,48 +100,69 @@ def file_change(action: str, path: str, root: Path) -> list[Change]:
 
 
 def allowed(root: Path, session: str, change: Change, payload: dict[str, object]) -> bool:
-    """Holds a change once, and lets its retry through with what the agent said before it.
+    """Holds a change until the agent has told the user about it, then lets its retry through.
 
     Outside git there is no trail to remember a hold in, so nothing is held.
     """
     if trail(root) is None:
         return True
     earlier = [
-        entry["decision"]
+        entry
         for entry in entries(root)
         if entry.get("hook") == "change-gate"
         and entry.get("session") == session
         and entry.get("trigger") == change.trigger
         and entry.get("key") == change.key
     ]
-    last = earlier[-1] if earlier else ""
+    last = earlier[-1] if earlier else {}
     entry = {
         "hook": "change-gate",
         "session": session,
         "trigger": change.trigger,
         "key": change.key,
     }
-    if last == "released" and change.lasts_the_session:
+    decision = last.get("decision", "")
+    if decision == "released" and change.lasts_the_session:
         return True
-    if last == "held":
+    transcript = transcript_lines(payload)
+    mark = "" if transcript is None else str(len(transcript))
+    if decision == "held" and transcript is None:
+        unverified = "unverified: the client names no transcript to check"
         record(
-            root, {**entry, "decision": "released", "target": change.target, "said": said(payload)}
+            root, {**entry, "decision": "released", "target": change.target, "detail": unverified}
         )
         return True
-    record(root, {**entry, "decision": "held", "target": change.target})
-    question = QUESTIONS[change.trigger]
+    if decision == "held" and transcript is not None:
+        words = words_since(transcript, int(last.get("mark") or 0))
+        if words:
+            record(root, {**entry, "decision": "released", "target": change.target, "said": words})
+            return True
+        silent = "retried without telling the user"
+        record(
+            root,
+            {**entry, "decision": "held", "target": change.target, "mark": mark, "detail": silent},
+        )
+        err(f"py-harness change gate: {change.doing} was retried without a word to the user.")
+        err("Write the explanation as a message to the user first, then make the change again.")
+        return False
+    record(root, {**entry, "decision": "held", "target": change.target, "mark": mark})
     err(f"py-harness change gate: before {change.doing}, tell the user in two or three lines")
-    err(f"{question}. Then make the same change again.")
+    err(f"{QUESTIONS[change.trigger]}. Then make the same change again.")
     return False
 
 
-def said(payload: dict[str, object]) -> str:
-    """The agent's last words before this change, when the client names its transcript."""
+def transcript_lines(payload: dict[str, object]) -> list[str] | None:
+    """The session so far, when the client names its transcript."""
     path = Path(text(payload, "transcript_path"))
     if not path.name or not path.is_file():
-        return ""
+        return None
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def words_since(transcript: list[str], mark: int) -> str:
+    """What the agent wrote for the user after the mark; its hidden reasoning does not count."""
     last = ""
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in transcript[mark:]:
         # A transcript line is one JSON object; an assistant's holds its message's content blocks.
         event = cast("dict[str, object]", json.loads(line))
         message = event.get("message")

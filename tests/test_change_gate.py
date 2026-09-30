@@ -96,12 +96,25 @@ def test_the_editor_agents_tool_names_are_recognised(project: Project) -> None:
     )
 
 
-def test_the_release_keeps_what_the_agent_said_before_the_change(
+def append(transcript: Path, *events: dict[str, object]) -> None:
+    with transcript.open("a") as file:
+        file.writelines(json.dumps(event) + "\n" for event in events)
+
+
+def spoken(words: str) -> dict[str, object]:
+    return {"type": "assistant", "message": {"content": [{"type": "text", "text": words}]}}
+
+
+def test_the_release_keeps_what_the_agent_told_the_user_after_the_hold(
     project: Project, tmp_path: Path
 ) -> None:
     transcript = tmp_path / "session.jsonl"
-    lines = [
-        {"type": "user", "message": {"content": "add a module"}},
+    append(transcript, spoken("Earlier words, before the change was held."))
+    payload = {**call("Write", file_path="src/demo/new.py"), "transcript_path": str(transcript)}
+    assert hook(project.root, payload).returncode == HELD
+    append(
+        transcript,
+        {"type": "user", "message": {"content": "held"}},
         {"type": "assistant", "message": "not an object"},
         {
             "type": "assistant",
@@ -113,12 +126,31 @@ def test_the_release_keeps_what_the_agent_said_before_the_change(
             },
         },
         {"type": "assistant", "message": {"content": "plain"}},
-    ]
-    transcript.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
-    payload = {**call("Write", file_path="src/demo/new.py"), "transcript_path": str(transcript)}
-    hook(project.root, payload)
-    hook(project.root, payload)
+    )
+    assert hook(project.root, payload).returncode == 0
     assert entries(project.root)[-1]["said"] == "Creating new.py: the parser needs it."
+
+
+def test_a_silent_retry_is_held_again(project: Project, tmp_path: Path) -> None:
+    transcript = tmp_path / "session.jsonl"
+    append(transcript, spoken("Starting."))
+    payload = {**call("Edit", file_path="pyproject.toml"), "transcript_path": str(transcript)}
+    hook(project.root, payload)
+    thinking = {"type": "thinking", "thinking": "I will just retry."}
+    append(transcript, {"type": "assistant", "message": {"content": [thinking]}})
+    silent = hook(project.root, payload)
+    assert silent.returncode == HELD
+    assert "was retried without a word to the user" in silent.stderr
+    assert entries(project.root)[-1]["detail"] == "retried without telling the user"
+    append(transcript, spoken("Declaring trial as first-party, as you asked."))
+    assert hook(project.root, payload).returncode == 0
+    assert decisions(project) == ["held", "held", "released"]
+
+
+def test_without_a_transcript_the_release_is_marked_unverified(project: Project) -> None:
+    hook(project.root, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, call("Write", file_path="src/demo/new.py"))
+    assert entries(project.root)[-1]["detail"].startswith("unverified")
 
 
 def test_outside_git_nothing_is_held(tmp_path: Path) -> None:
@@ -135,10 +167,10 @@ def test_an_empty_event_passes(project: Project) -> None:
 
 def test_audit_prints_each_decision_and_what_was_said(project: Project, tmp_path: Path) -> None:
     transcript = tmp_path / "session.jsonl"
-    said = {"type": "assistant", "message": {"content": [{"type": "text", "text": "Needed."}]}}
-    transcript.write_text(json.dumps(said) + "\n")
+    append(transcript, spoken("Starting."))
     payload = {**call("Write", file_path="src/demo/new.py"), "transcript_path": str(transcript)}
     hook(project.root, payload)
+    append(transcript, spoken("Needed."))
     hook(project.root, payload)
     shown = project.make("audit").stdout
     assert "change-gate  held  new file  src/demo/new.py" in shown
