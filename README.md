@@ -120,8 +120,10 @@ contracts go in `[tool.importlinter]`.
 
 ## Tradeoff
 
-The harness pins every tool it runs, so a repository cannot move one tool on
-its own; it moves the harness. Coverage is full branch coverage with no
+The harness pins exactly the tools whose version decides a verdict, ruff and
+basedpyright, so a repository cannot move them on its own; it moves the
+harness. The tools that only run the checks take compatible ranges, and each
+repository's lockfile records the versions it runs. Coverage is full branch coverage with no
 exclusion comment, so an existing codebase reaches it before `ready` can pass.
 
 ## Limits

@@ -531,12 +531,12 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "basedpyright", specifier = "==1.40.1" },
-    { name = "coverage", specifier = "==7.16.2" },
-    { name = "detect-secrets", specifier = "==1.5.0" },
-    { name = "grimp", specifier = "==3.17" },
-    { name = "import-linter", specifier = "==2.15" },
-    { name = "pytest", specifier = "==9.1.1" },
-    { name = "pytest-cov", specifier = "==7.1.0" },
+    { name = "coverage", specifier = ">=7.16.2,<8" },
+    { name = "detect-secrets", specifier = ">=1.5.0,<2" },
+    { name = "grimp", specifier = ">=3.17,<4" },
+    { name = "import-linter", specifier = ">=2.15,<3" },
+    { name = "pytest", specifier = ">=9.1.1,<10" },
+    { name = "pytest-cov", specifier = ">=7.1.0,<8" },
     { name = "ruff", specifier = "==0.16.9" },
 ]
 

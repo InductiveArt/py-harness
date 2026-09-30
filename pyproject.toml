@@ -5,14 +5,17 @@ description = "Shared build and health tooling for Python repositories. Consumed
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
+# A checker whose new version can fail code that passed is pinned exactly, so it moves only
+# with a release of this package. The rest run the checks without deciding them, so they take
+# compatible ranges; each consumer's lockfile still records the version it runs.
 dependencies = [
   "basedpyright==1.40.1",
-  "coverage==7.16.2",
-  "detect-secrets==1.5.0",
-  "grimp==3.17",
-  "import-linter==2.15",
-  "pytest==9.1.1",
-  "pytest-cov==7.1.0",
+  "coverage>=7.16.2,<8",
+  "detect-secrets>=1.5.0,<2",
+  "grimp>=3.17,<4",
+  "import-linter>=2.15,<3",
+  "pytest>=9.1.1,<10",
+  "pytest-cov>=7.1.0,<8",
   "ruff==0.16.9",
 ]
 

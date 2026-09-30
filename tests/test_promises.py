@@ -2,6 +2,10 @@ import re
 
 import pytest
 
+from py_harness.tables import read_table
+from py_harness.tables import string_list
+from py_harness.tables import subtable
+from tests.support import REPOSITORY
 from tests.support import Project
 
 RUFF_CODE = re.compile(r"^\S+:\d+:\d+: (?P<code>[A-Z]+\d+) ", re.MULTILINE)
@@ -173,3 +177,13 @@ def test_typecheck_rejects_an_implicit_reexport(project: Project) -> None:
     project.write("src/demo/passer.py", "from demo.origin import thing\n\nvalue = thing()\n")
     project.write("src/demo/consumer.py", "from demo.passer import thing\n\nvalue = thing()\n")
     assert "reportPrivateLocalImportUsage" in pyright_rules(project)
+
+
+def test_only_the_checkers_that_decide_a_verdict_are_pinned_exactly() -> None:
+    project = subtable(read_table(REPOSITORY / "pyproject.toml"), "project")
+    exact = sorted(
+        spec.split("==")[0] for spec in string_list(project, "dependencies") if "==" in spec
+    )
+    ranged = [spec for spec in string_list(project, "dependencies") if "==" not in spec]
+    assert exact == ["basedpyright", "ruff"]
+    assert all(">=" in spec and ",<" in spec for spec in ranged)
