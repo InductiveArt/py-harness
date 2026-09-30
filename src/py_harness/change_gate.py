@@ -147,8 +147,9 @@ def allowed(root: Path, session: str, change: Change, payload: dict[str, object]
     if events is None:
         record(root, {**entry, "decision": "released", "detail": UNVERIFIED})
         return True
-    block = answer(change, said_since(events, int(last.get("mark") or 0)))
-    missing = shortfall(change, block, typed(events))
+    said = said_since(events, int(last.get("mark") or 0))
+    block = answer(change, said)
+    missing = shortfall(change, said, block, typed(events))
     if not missing:
         answered = {key: block[key] for key in change.fields}
         record(root, {**entry, "decision": "released", **answered})
@@ -161,7 +162,8 @@ def allowed(root: Path, session: str, change: Change, payload: dict[str, object]
 def show(change: Change, state: str) -> None:
     """The block the agent must write the user, with its CHANGE line already filled in."""
     err(f"py-harness change gate: {change.doing} {state}.")
-    err("Write the user a message with these lines, then make the same change again:")
+    err("Write the user these lines as text in your reply, not in your reasoning:")
+    err("neither the user nor this gate sees your reasoning. Then make the same change again.")
     err(f"CHANGE: {change.target}")
     hints = {**HINTS, "why": QUESTIONS[change.trigger]}
     for field in change.fields:
@@ -193,8 +195,10 @@ def blocks(said: list[str]) -> list[Entry]:
     return found
 
 
-def shortfall(change: Change, block: Entry, words: list[str]) -> str:
+def shortfall(change: Change, said: list[str], block: Entry, words: list[str]) -> str:
     """Why the block does not yet answer for the change; empty once it does."""
+    if not said:
+        return "no text since the hold; reasoning does not count"
     if not block:
         return f"no message to the user since the hold has the line CHANGE: {change.target}"
     empty = [field.upper() for field in change.fields if not block.get(field)]

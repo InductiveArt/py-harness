@@ -132,6 +132,7 @@ def test_a_hold_prints_the_block_to_write_with_its_change_line_filled_in(
     assert "creating src/demo/new.py is held until the user is told about it." in stderr
     assert "CHANGE: src/demo/new.py\nWHY: <what will use it" in stderr
     assert "UNDO: <the command that reverses it>" in stderr
+    assert "as text in your reply, not in your reasoning" in stderr
     assert "ASKED" not in stderr
 
 
@@ -156,7 +157,9 @@ def test_the_block_written_after_the_hold_releases_the_change(
     assert (released["why"], released["undo"]) == ("the parser reads it", "git rm it")
 
 
-def test_a_retry_without_the_block_is_held_again(project: Project, transcript: Path) -> None:
+def test_a_retry_after_only_reasoning_is_told_reasoning_does_not_count(
+    project: Project, transcript: Path
+) -> None:
     payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
     hook(project.root, payload)
     reasoning = {"type": "thinking", "thinking": block("src/demo/new.py")}
@@ -165,8 +168,16 @@ def test_a_retry_without_the_block_is_held_again(project: Project, transcript: P
         {"type": "assistant", "message": {"content": [reasoning]}},
         {"type": "assistant", "message": "not an object"},
         {"type": "assistant", "message": {}},
-        said("The gate didn't pick up that note."),
     )
+    retried = hook(project.root, payload)
+    assert retried.returncode == HELD
+    assert "is still held: no text since the hold; reasoning does not count." in retried.stderr
+
+
+def test_a_retry_without_the_block_is_held_again(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, payload)
+    append(transcript, said("The gate didn't pick up that note."))
     retried = hook(project.root, payload)
     assert retried.returncode == HELD
     assert "creating src/demo/new.py is still held: no message to the user" in retried.stderr

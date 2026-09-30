@@ -90,7 +90,8 @@ ASKED: your own words asking for it, copied exactly
 ```
 
 The retry goes through only once a message to you, written after the hold,
-carries that `CHANGE` line with every field filled in. A new file needs no
+carries that `CHANGE` line with every field filled in; what the agent only
+reasons never reaches you, so it does not count. A new file needs no
 `ASKED`: where code lives is the agent's call. A deletion or a wiring edit
 does, and the gate checks the quote against what you typed, three words at
 least, so a change you never asked for stays held until you do. In
