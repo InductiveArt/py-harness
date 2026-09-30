@@ -50,6 +50,11 @@ QUESTIONS = {
     "destructive": "what it deletes or discards, and why",
     "wiring": "what changes in how the harness runs here",
 }
+# What the agent states before the change, for its own context: none of it is checked.
+FACTS = {
+    "new file": "who will use it, and which existing module could hold it instead: search for one",
+    "wiring": "what changes in how the harness runs here, and the user's words asking for it",
+}
 HINTS = {
     "undo": "the command that reverses it",
     "asked": "the user's own words asking for it, copied exactly",
@@ -139,8 +144,9 @@ def allowed(
 ) -> bool:
     """Lets a destructive change through on the user's own words, any other once it was held.
 
-    The one hold of any other change asks the agent to think it through; the end of the
-    turn asks it to tell the user. Outside git there is no trail, so nothing is held.
+    The one hold of any other change asks the agent for the facts that bear on it, so they
+    stand in its context as it makes the change. Outside git there is no trail, so nothing
+    is held.
     """
     if trail(root) is None:
         return True
@@ -153,13 +159,8 @@ def allowed(
     if last:
         return True
     record(root, {**entry, "decision": "held"})
-    err(
-        f"py-harness change gate: before {change.doing}, think through {QUESTIONS[change.trigger]}."
-    )
-    err("Then make the same change again. When you end your turn, tell the user about it")
-    err("in your closing message, in these lines:")
-    for line in change.template():
-        err(line)
+    err(f"py-harness change gate: before {change.doing}, present these facts:")
+    err(f"{FACTS[change.trigger]}. Then make the same change again.")
     return False
 
 
@@ -184,7 +185,8 @@ def confirmed(
     err(f"py-harness change gate: {change.doing} is held: {reason}.")
     err("If the user asked for it, put their own words in the command's description, in")
     err("double quotes, three words at least, and run it again. If they never asked, do not")
-    err("run it: ask them, and quote their answer.")
+    err("run it: ask them, and quote their answer. If git cannot restore what it deletes,")
+    err("keep a copy first and say where.")
     return False
 
 

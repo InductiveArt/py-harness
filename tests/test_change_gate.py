@@ -109,10 +109,8 @@ def test_an_empty_event_passes(project: Project) -> None:
 def test_a_new_file_is_held_once_to_be_thought_through(project: Project) -> None:
     first = hook(project.root, call("Write", file_path="src/demo/new.py"))
     assert first.returncode == HELD
-    assert "before creating src/demo/new.py, think through what will use it" in first.stderr
-    assert "CHANGE: src/demo/new.py\nWHY: <what will use it" in first.stderr
-    assert "UNDO: <the command that reverses it>" in first.stderr
-    assert "ASKED" not in first.stderr
+    assert "before creating src/demo/new.py, present these facts:" in first.stderr
+    assert "which existing module could hold it instead: search for one" in first.stderr
     assert hook(project.root, call("Write", file_path="src/demo/new.py")).returncode == 0
     assert hook(project.root, call("Write", file_path="src/demo/new.py")).returncode == 0
     assert decisions(project) == ["held", "released"]
@@ -121,7 +119,7 @@ def test_a_new_file_is_held_once_to_be_thought_through(project: Project) -> None
 def test_the_wiring_is_held_once_per_session(project: Project) -> None:
     first = hook(project.root, call("Edit", file_path="pyproject.toml"))
     assert first.returncode == HELD
-    assert "ASKED: <the user's own words asking for it, copied exactly>" in first.stderr
+    assert "the user's words asking for it. Then make the same change again." in first.stderr
     assert hook(project.root, call("Edit", file_path="pyproject.toml")).returncode == 0
     assert hook(project.root, call("Edit", session="s2", file_path="Makefile")).returncode == HELD
 
@@ -144,6 +142,7 @@ def test_a_command_without_the_users_words_is_held(project: Project, transcript:
     reason = "running `rm src/demo/old.py` is held: its description quotes nothing the user said."
     assert reason in held.stderr
     assert "If they never asked, do not" in held.stderr
+    assert "If git cannot restore what it deletes,\nkeep a copy first" in held.stderr
 
 
 def test_a_quote_the_user_never_wrote_is_held(project: Project, transcript: Path) -> None:
