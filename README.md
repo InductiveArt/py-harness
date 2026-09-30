@@ -77,32 +77,33 @@ ln -s ../../.venv/share/py-harness/hooks/vscode.json .github/hooks/py-harness.js
 Before the project passes, the hook would send the agent after every existing
 finding instead of the task at hand, so it waits until then.
 
-A second hook, the change gate, is opt-in the same way. Before the agent
-creates a file, runs a destructive command (`rm`, `git reset --hard`, a
-force-push, ...) or edits the harness wiring (`pyproject.toml`, the
-Makefile), it holds the change and prints a block for the agent to write you:
+A second hook, the change gate, is opt-in the same way. It watches three
+kinds of change: a new file, an edit to the harness wiring (`pyproject.toml`,
+the Makefile), and a destructive command (`rm`, `git reset --hard`, a
+force-push, ...).
+
+- A destructive command runs only when its description quotes you asking for
+  it: three words at least, found in what you typed or picked in answer to the
+  agent's question. A command you never asked for has nothing to quote, so the
+  agent has to ask you first.
+- A new file or a wiring edit is held once, for the agent to think it
+  through; its retry goes through.
+- At the end of each turn, the Stop gate compares the working tree with how
+  the session found it. Every new file, deletion and wiring edit, however it
+  was made, needs a block in the agent's closing message, and a deletion or a
+  wiring edit quotes you:
 
 ```text
-CHANGE: rm src/app/legacy.py
-WHY: what it deletes or discards, and why
+CHANGE: pyproject.toml
+WHY: what changes in how the harness runs here
 UNDO: the command that reverses it
 ASKED: your own words asking for it, copied exactly
 ```
 
-The change goes through once a message to you carries that `CHANGE` line
-with every field filled in; what the agent only reasons never reaches you,
-so it does not count. A new file needs no `ASKED`: where code lives is the
-agent's call. A deletion or a wiring edit does, and the gate checks the
-quote against what you typed or picked in answer to the agent's question,
-three words at least, so a change you never asked for stays held until you
-do.
-
-A shell command can write a file without naming it to the gate, so the
-Stop gate checks the outcome too. At the end of each turn it compares the
-working tree with how the session found it: a new file, a deletion or a
-wiring edit that no block told you about, however it was made, holds the
-turn until the agent writes one. The turn's second stop lets it go, marked
-untold in the trail. In `.claude/settings.local.json`:
+Until the blocks are there the turn is held; its second stop lets it go,
+marked untold in the trail. The closing message is where the agent's words
+reach you as written: what it writes between tool calls is often kept as its
+reasoning, reworded, so it does not count. In `.claude/settings.local.json`:
 
 ```json
 {
@@ -128,7 +129,8 @@ For VS Code, link `.venv/share/py-harness/hooks/vscode-changes.json` into
 
 Both gates record every decision in the clone's audit trail,
 `.git/py-harness/audit.jsonl`, never committed; when the change gate lets a
-held change through, the trail keeps the block that released it.
+destructive command through, the trail keeps your words it quoted, and for
+each change the block that told you.
 `make audit` prints the trail.
 
 Run `uv sync` once first: make cannot read the include before `.venv` exists.
@@ -206,6 +208,8 @@ What no check catches, so a passing run does not claim it:
   end of the turn cannot see it: git never knew the file.
 - Changes you make yourself while the agent works. The end of the turn counts
   them as the session's.
+- The editor agent's quote for a destructive command. It is read from the
+  terminal tool's `explanation` field, which no editor session has shown yet.
 
 ## Invariants
 

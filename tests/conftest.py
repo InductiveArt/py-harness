@@ -2,9 +2,12 @@ from pathlib import Path
 
 import pytest
 
+from tests.support import PROMPT
 from tests.support import SHARE
 from tests.support import Project
+from tests.support import append
 from tests.support import manifest
+from tests.support import typed
 
 
 @pytest.fixture
@@ -17,3 +20,11 @@ def project(tmp_path: Path) -> Project:
     created.write(".gitignore", "__pycache__/\n")
     created.git("init", "-q")
     return created
+
+
+@pytest.fixture
+def transcript(tmp_path: Path) -> Path:
+    """An agent session's transcript, holding the user's prompt."""
+    path = tmp_path / "session.jsonl"
+    append(path, typed(PROMPT))
+    return path

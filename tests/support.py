@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import subprocess
@@ -95,3 +96,25 @@ def declare_layout(project: Project) -> None:
     (project.root / "src" / "demo" / "__init__.py").unlink()
     (project.root / "src" / "demo").rmdir()
     project.write("src/main/demo/__init__.py")
+
+
+# #region Agent sessions
+
+PROMPT = "Tidy up: src/demo/old.py is no longer wanted, delete it,\nthen add the parser."
+# The user's words in the agent's curly quotes, across the prompt's line break.
+QUOTE = "\u201cdelete it, then add the parser\u201d"
+
+
+def append(transcript: Path, *events: dict[str, object]) -> None:
+    with transcript.open("a") as file:
+        file.writelines(json.dumps(event) + "\n" for event in events)
+
+
+def said(words: str) -> dict[str, object]:
+    """What the agent wrote as text."""
+    return {"type": "assistant", "message": {"content": [{"type": "text", "text": words}]}}
+
+
+def typed(words: str) -> dict[str, object]:
+    """What the user wrote."""
+    return {"type": "user", "message": {"content": words}}
