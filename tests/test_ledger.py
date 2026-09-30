@@ -135,6 +135,17 @@ SHARED_RULES = {
     "rule-no-hidden-names": f"{RULE_TESTS}::test_no_hidden_names_rejects",
 }
 
+# What the plugin delivers to an agent client, mapped the same way.
+PLUGIN: dict[str, str] = {
+    "version": "tests/test_plugin.py::test_the_plugin_is_versioned_with_the_package",
+    "skills": (
+        "tests/test_plugin.py::test_the_plugin_serves_the_shared_skills_from_their_one_copy"
+    ),
+    "marketplace": (
+        "tests/test_plugin.py::test_the_marketplace_lists_the_plugin_from_this_repository"
+    ),
+}
+
 # The general notes that precede the cycle, mapped the same way.
 NOTES: dict[str, tuple[str, ...]] = {
     "1.comments-stay-in-scope": (
@@ -176,6 +187,7 @@ def test_every_named_test_exists() -> None:
     named = {test for tests in (*CHECKLIST.values(), *NOTES.values()) for test in tests}
     named.update(TARGETS.values())
     named.update(SHARED_RULES.values())
+    named.update(PLUGIN.values())
     missing = [
         test
         for test in sorted(named)
