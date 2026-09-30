@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 from py_harness.audit import entries
+from py_harness.change_gate import Change
+from py_harness.change_gate import remember
+from py_harness.change_gate import untold
 from tests.support import Project
 
 HELD = 2
@@ -173,7 +176,7 @@ def test_a_retry_after_only_reasoning_is_told_reasoning_does_not_count(
     )
     retried = hook(project.root, payload)
     assert retried.returncode == HELD
-    assert "is still held: no text since the hold; reasoning does not count." in retried.stderr
+    assert "is still held: no text reached the user; reasoning does not count." in retried.stderr
 
 
 def test_a_retry_without_the_block_is_held_again(project: Project, transcript: Path) -> None:
@@ -188,11 +191,13 @@ def test_a_retry_without_the_block_is_held_again(project: Project, transcript: P
     assert decisions(project) == ["held", "held", "released"]
 
 
-def test_a_block_written_before_the_hold_does_not_count(project: Project, transcript: Path) -> None:
+def test_a_block_written_before_the_first_attempt_lets_it_through_unheld(
+    project: Project, transcript: Path
+) -> None:
     append(transcript, said(block("src/demo/new.py")))
     payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
-    hook(project.root, payload)
-    assert hook(project.root, payload).returncode == HELD
+    assert hook(project.root, payload).returncode == 0
+    assert decisions(project) == ["released"]
 
 
 def test_a_block_for_another_change_does_not_count(project: Project, transcript: Path) -> None:
@@ -232,10 +237,28 @@ def test_a_quote_the_user_never_wrote_is_held(project: Project, transcript: Path
     hook(project.root, payload)
     skill = {**typed("remove the scratch file"), "isMeta": True}
     result = {"type": "tool_result", "content": "remove the scratch file"}
-    append(transcript, skill, {"type": "user", "message": {"content": [result]}})
+    ran = {"type": "user", "message": {"content": [result]}}
+    append(
+        transcript,
+        skill,
+        {**ran, "toolUseResult": "remove the scratch file"},
+        {**ran, "toolUseResult": {"stdout": "remove the scratch file"}},
+    )
     append(transcript, said(block("rm src/demo/old.py", asked="remove the scratch file")))
     assert hook(project.root, payload).returncode == HELD
     assert entries(project.root)[-1]["detail"] == "the ASKED words are in no message from the user"
+
+
+def test_an_answer_picked_from_the_agents_question_counts_as_the_users_words(
+    project: Project, transcript: Path
+) -> None:
+    payload = traced(transcript, call("Bash", command="rm src/demo/old.py"))
+    hook(project.root, payload)
+    answers = {"answers": {"What about old.py?": "Delete it, it is dead", "Why?": 1}}
+    result = {"type": "tool_result", "content": "The user answered."}
+    append(transcript, {"type": "user", "message": {"content": [result]}, "toolUseResult": answers})
+    append(transcript, said(block("rm src/demo/old.py", asked="Delete it, it is dead")))
+    assert hook(project.root, payload).returncode == 0
 
 
 def test_a_quote_under_three_words_is_held(project: Project, transcript: Path) -> None:
@@ -268,6 +291,139 @@ def test_each_destructive_command_answers_anew(project: Project, transcript: Pat
 def test_without_a_transcript_the_release_is_marked_unverified(project: Project) -> None:
     hook(project.root, call("Write", file_path="src/demo/new.py"))
     hook(project.root, call("Write", file_path="src/demo/new.py"))
+    assert entries(project.root)[-1]["detail"].startswith("unverified")
+
+
+# #region At the end of a turn
+
+
+def stop(transcript: Path, session: str = "s1") -> dict[str, object]:
+    return {"session_id": session, "transcript_path": str(transcript)}
+
+
+def found(changes: list[Change]) -> set[tuple[str, str]]:
+    return {(change.trigger, change.target) for change in changes}
+
+
+def test_a_file_a_command_made_is_held_at_the_end_of_the_turn(
+    project: Project, transcript: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hook(project.root, call("Bash", command="ls"))
+    project.write("src/demo/made.py", "VALUE = 1\n")
+    hook(project.root, call("Bash", command="ls"))
+    held = untold(project.root, stop(transcript), final=False)
+    assert found(held) == {("new file", "src/demo/made.py")}
+    stderr = capsys.readouterr().err
+    assert "creating src/demo/made.py was done, but no text reached the user" in stderr
+    assert "Then end your turn again." in stderr
+
+
+def test_the_end_of_the_turn_finds_every_kind_of_change(project: Project, transcript: Path) -> None:
+    project.write("src/demo/gone.py")
+    project.write("src/demo/removed.py")
+    project.commit()
+    remember(project.root, "s1")
+    project.git("rm", "-q", "src/demo/gone.py")
+    (project.root / "src/demo/removed.py").unlink()
+    project.write("src/demo/made.py")
+    project.write("src/demo/staged.py")
+    project.git("add", "src/demo/staged.py")
+    project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
+    project.write("src/demo/__init__.py", "VALUE = 1\n")
+    assert found(untold(project.root, stop(transcript), final=False)) == {
+        ("destructive", "src/demo/gone.py"),
+        ("destructive", "src/demo/removed.py"),
+        ("new file", "src/demo/made.py"),
+        ("new file", "src/demo/staged.py"),
+        ("wiring", "pyproject.toml"),
+    }
+
+
+def test_what_the_tree_held_when_the_session_began_is_not_held(
+    project: Project, transcript: Path
+) -> None:
+    project.write("notes.txt", "mine\n")
+    remember(project.root, "s1")
+    assert untold(project.root, stop(transcript), final=False) == []
+
+
+def test_without_a_baseline_the_end_of_the_turn_judges_nothing(
+    project: Project, transcript: Path
+) -> None:
+    project.write("src/demo/made.py")
+    assert untold(project.root, stop(transcript), final=False) == []
+
+
+def test_an_unreadable_index_judges_nothing(project: Project, transcript: Path) -> None:
+    remember(project.root, "s1")
+    project.write("src/demo/made.py")
+    (project.root / ".git" / "index").write_text("not an index")
+    assert untold(project.root, stop(transcript), final=False) == []
+    remember(project.root, "s2")
+    assert not (project.root / ".git" / "py-harness" / "baselines" / "s2.json").exists()
+
+
+def test_a_change_the_gate_released_is_not_held_again(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("src/demo/new.py")))
+    hook(project.root, payload)
+    project.write("src/demo/new.py")
+    assert untold(project.root, stop(transcript), final=False) == []
+
+
+def test_a_deletion_released_as_a_command_naming_the_file_is_not_held_again(
+    project: Project, transcript: Path
+) -> None:
+    project.write("src/demo/old.py")
+    project.commit()
+    payload = traced(transcript, call("Bash", command="git rm -q src/demo/old.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("git rm -q src/demo/old.py", asked=QUOTE)))
+    assert hook(project.root, payload).returncode == 0
+    project.git("rm", "-q", "src/demo/old.py")
+    assert untold(project.root, stop(transcript), final=False) == []
+
+
+def test_a_block_written_earlier_in_the_session_counts_at_the_end(
+    project: Project, transcript: Path
+) -> None:
+    remember(project.root, "s1")
+    append(transcript, said(block("src/demo/made.py")))
+    project.write("src/demo/made.py")
+    assert untold(project.root, stop(transcript), final=False) == []
+
+
+def test_a_block_in_the_closing_reply_releases_the_change_at_the_final_stop(
+    project: Project, transcript: Path
+) -> None:
+    remember(project.root, "s1")
+    project.write("src/demo/made.py")
+    untold(project.root, stop(transcript), final=False)
+    append(transcript, said(f"Done.\n\n{block('src/demo/made.py')}"))
+    assert untold(project.root, stop(transcript), final=True) == []
+    assert entries(project.root)[-1]["why"] == "the parser reads it"
+
+
+def test_the_final_stop_releases_what_is_still_untold_and_marks_it(
+    project: Project, transcript: Path
+) -> None:
+    remember(project.root, "s1")
+    project.write("src/demo/made.py")
+    untold(project.root, stop(transcript), final=False)
+    assert untold(project.root, stop(transcript), final=True) == []
+    released = entries(project.root)[-1]
+    assert (released["decision"], released["detail"]) == (
+        "released",
+        "untold: no text reached the user; reasoning does not count",
+    )
+
+
+def test_without_a_transcript_the_end_of_the_turn_holds_once(project: Project) -> None:
+    remember(project.root, "s1")
+    project.write("src/demo/made.py")
+    assert len(untold(project.root, {"session_id": "s1"}, final=False)) == 1
+    assert untold(project.root, {"session_id": "s1"}, final=True) == []
     assert entries(project.root)[-1]["detail"].startswith("unverified")
 
 

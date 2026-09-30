@@ -4,6 +4,7 @@ import subprocess
 from typing import cast
 
 from py_harness.audit import entries
+from py_harness.change_gate import remember
 from tests.support import SHARE
 from tests.support import Project
 from tests.support import harness_environment
@@ -61,6 +62,17 @@ def test_the_gate_reports_a_check_that_cannot_start(project: Project) -> None:
     result = gate(project)
     assert result.returncode == HELD
     assert "No rule to make target" in result.stderr
+
+
+def test_an_untold_change_holds_the_stop_even_when_the_check_passes(project: Project) -> None:
+    remember(project.root, "s1")
+    project.write("tests/test_unit.py", "def test_passes() -> None:\n    assert True\n")
+    result = gate(project, '{"session_id": "s1", "stop_hook_active": false}')
+    assert result.returncode == HELD
+    assert "creating tests/test_unit.py was done, but" in result.stderr
+    held = entries(project.root)[-1]
+    assert (held["hook"], held["decision"]) == ("stop-gate", "held")
+    assert held["detail"] == "changes no block told the user about"
 
 
 def test_the_shipped_vscode_hook_runs_the_gate() -> None:

@@ -89,13 +89,20 @@ UNDO: the command that reverses it
 ASKED: your own words asking for it, copied exactly
 ```
 
-The retry goes through only once a message to you, written after the hold,
-carries that `CHANGE` line with every field filled in; what the agent only
-reasons never reaches you, so it does not count. A new file needs no
-`ASKED`: where code lives is the agent's call. A deletion or a wiring edit
-does, and the gate checks the quote against what you typed, three words at
-least, so a change you never asked for stays held until you do. In
-`.claude/settings.local.json`:
+The change goes through once a message to you carries that `CHANGE` line
+with every field filled in; what the agent only reasons never reaches you,
+so it does not count. A new file needs no `ASKED`: where code lives is the
+agent's call. A deletion or a wiring edit does, and the gate checks the
+quote against what you typed or picked in answer to the agent's question,
+three words at least, so a change you never asked for stays held until you
+do.
+
+A shell command can write a file without naming it to the gate, so the
+Stop gate checks the outcome too. At the end of each turn it compares the
+working tree with how the session found it: a new file, a deletion or a
+wiring edit that no block told you about, however it was made, holds the
+turn until the agent writes one. The turn's second stop lets it go, marked
+untold in the trail. In `.claude/settings.local.json`:
 
 ```json
 {
@@ -195,6 +202,10 @@ What no check catches, so a passing run does not claim it:
   you and that its quote is yours, not that the quote fits the change.
 - Holds in a client that names no transcript. The retry goes through, marked
   unverified in the trail.
+- An untracked file deleted by a command the destructive patterns miss. The
+  end of the turn cannot see it: git never knew the file.
+- Changes you make yourself while the agent works. The end of the turn counts
+  them as the session's.
 
 ## Invariants
 
