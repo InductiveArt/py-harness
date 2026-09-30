@@ -45,8 +45,8 @@ SHARED = (
     "coverage.toml",
     "agent-rules.md",
     "hooks/vscode.json",
-    "skills/commenting/SKILL.md",
-    "skills/quality-tooling/SKILL.md",
+    "skills/py-commenting/SKILL.md",
+    "skills/py-quality-tooling/SKILL.md",
 )
 
 
@@ -86,16 +86,6 @@ def consumer(tmp_path_factory: pytest.TempPathFactory) -> Project:
     created.write("src/consumer/__init__.py")
     created.write("src/consumer/calc.py", "def double(x: int) -> int:\n    return x * 2\n")
     created.write("tests/test_calc.py", TEST_CALC)
-    links = created.root / ".claude" / "skills"
-    links.mkdir(parents=True)
-    for skill in ("commenting", "quality-tooling"):
-        (links / skill).symlink_to(Path("../../.venv/share/py-harness/skills") / skill)
-    created.write("CLAUDE.md", "@.venv/share/py-harness/agent-rules.md\n")
-    instructions = created.root / ".github" / "instructions"
-    instructions.mkdir(parents=True)
-    (instructions / "py-harness.instructions.md").symlink_to(
-        Path("../../.venv/share/py-harness/agent-rules.md")
-    )
     created.git("init", "-q")
     for bootstrap in (["uv", "lock"], ["uv", "sync"]):
         completed = run(bootstrap, created.root)
@@ -112,6 +102,7 @@ def test_a_consumer_passes_ready(consumer: Project) -> None:
     result = run(["make", "-s", "ready"], consumer.root)
     assert result.returncode == 0, result.stdout[-3000:]
     assert "STATUS: PASSED" in result.stdout
+    assert (consumer.root / ".claude" / "rules" / "py-harness.md").is_file()
 
 
 def test_a_consumer_passes_ci(consumer: Project) -> None:

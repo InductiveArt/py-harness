@@ -33,23 +33,14 @@ extends = ".venv/share/py-harness/pyrightconfig.json"
 include .venv/share/py-harness/harness.mk
 ```
 
-Give the agent the harness's rules and skills, as links into the version it
-runs:
-
-```sh
-echo '@.venv/share/py-harness/agent-rules.md' >> CLAUDE.md
-mkdir -p .github/instructions
-ln -s ../../.venv/share/py-harness/agent-rules.md .github/instructions/py-harness.instructions.md
-mkdir -p .claude/skills
-ln -s ../../.venv/share/py-harness/skills/commenting .claude/skills/commenting
-ln -s ../../.venv/share/py-harness/skills/quality-tooling .claude/skills/quality-tooling
-```
-
-The rules tell the agent to run `make check` after every change and never to
-silence a finding; the skills explain each target and the fix each finding
-expects. Claude Code reads the rules through the import, Copilot in VS Code
-through the link, whichever model it runs; both read the skills from
-`.claude/skills`.
+The first `make check` gives the agent the harness's rules and skills: it
+links `.claude/rules/py-harness.md`, `.claude/skills/py-quality-tooling` and
+`.claude/skills/py-commenting` into the harness version the lockfile pins, and
+lists them in `.git/info/exclude`, so no commit carries them. Claude Code reads
+them as they are; Copilot in VS Code reads them once `chat.useClaudeMdFile` is
+on in its settings, whichever model it runs. The rules tell the agent to run
+`make check` after every change and never to silence a finding; the skills
+explain each target and the fix each finding expects.
 
 Once `make check` passes, a Stop hook can hold the agent to it: when it stops
 with uncommitted changes and the check fails, the summary goes back to it and
@@ -126,9 +117,6 @@ contracts go in `[tool.importlinter]`.
   in `tox.ini`, `[tool:pytest]` in `setup.cfg`), or ones that change which
   tests run or how they count (`addopts`, `python_files`, `norecursedirs`,
   `xfail_strict`). `wiring` refuses each.
-- A copied skill directory in place of a link, or a `CLAUDE.md` without the
-  rules import. Either leaves the agent on rules the harness no longer holds;
-  `doctor` fails on both and prints the line or link to add.
 
 ## Tradeoff
 
@@ -141,7 +129,7 @@ exclusion comment, so an existing codebase reaches it before `ready` can pass.
 What no check catches, so a passing run does not claim it:
 
 - A comment's prose. `no-comment-overreach` checks the names a comment
-  mentions, not what its words describe; the `commenting` skill carries the
+  mentions, not what its words describe; the `py-commenting` skill carries the
   rest.
 - Code only its own tests call. Coverage counts tests, so nothing finds a
   public function no production path uses.
@@ -167,8 +155,9 @@ What no check catches, so a passing run does not claim it:
   how many the change since the last commit added (`src/py_harness/suppressions.py`).
 - Every suppression suppresses something: unused `noqa`, unused type ignores,
   allowlist pragmas that allow nothing, and passing `xfail` tests all fail.
-- The agent reads the rules and skills of the harness version it runs: the
-  rules are imported and each skill is linked, never copied (`drift-agent`).
+- The agent reads the rules and skills of the harness version it runs: `make
+  check` links them and never copies them, and a file in a link's place fails
+  the step (`src/py_harness/agent.py`).
 - A search for a name finds every use: each symbol is imported under its own
   name, one per line, and no name is built at runtime (`no-hidden-names`).
 - No file or region exempts itself from a check; only a single line can be
@@ -184,8 +173,9 @@ What no check catches, so a passing run does not claim it:
 - `src/py_harness/`: the modules each target dispatches to.
 - `src/py_harness/rules/`: the shared doctor rules.
 - `share/agent-rules.md`: the rules every agent session loads.
-- `share/skills/`: the agent skills; `quality-tooling` is the working guide to
-  every target, and `commenting` the rules `no-comment-overreach` enforces in part.
+- `share/skills/`: the agent skills; `py-quality-tooling` is the working guide
+  to every target, and `py-commenting` the rules `no-comment-overreach` enforces
+  in part.
 - `tests/test_ledger.py`: what is proven, and where.
 
 ## License

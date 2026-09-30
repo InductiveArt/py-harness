@@ -98,6 +98,7 @@ def test_an_unknown_mode_is_a_usage_error(capsys: pytest.CaptureFixture[str]) ->
     ("line", "label"),
     [
         pytest.param("wiring: no ruff config", "Wiring problems (1):", id="wiring"),
+        pytest.param("agent: .claude/rules/x.md is not a link", "Agent layer (1):", id="agent"),
         pytest.param("a.py:1:1: unformatted: File would", "Unformatted files (1):", id="format"),
         pytest.param("a.py:1:1: T201 `print` found", "Ruff diagnostics (1):", id="ruff"),
         pytest.param("  a.py:1:5 - error: Type unknown", "Type errors (1):", id="types"),

@@ -1,5 +1,5 @@
 ---
-name: commenting
+name: py-commenting
 description: Use before writing or editing any comment, docstring, or doc text in Python source.
 ---
 

@@ -5,6 +5,7 @@ from tests.support import declared_targets
 
 LEFTOVERS = ("dist/demo.whl", ".ruff_cache/x", ".pytest_cache/x")
 REPO_WIDE_STAGES = (
+    "agent",
     "format",
     "format-fix",
     "lint",

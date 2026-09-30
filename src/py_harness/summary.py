@@ -21,6 +21,7 @@ class Category:
 
 CATEGORIES = (
     Category("Wiring problems", re.compile(r"^wiring: "), 20),
+    Category("Agent layer", re.compile(r"^agent: "), 10),
     Category("Unformatted files", re.compile(r"^\S+:\d+:\d+: unformatted: "), 20),
     Category("Ruff diagnostics", re.compile(r"^\S+\.pyi?:\d+:\d+: [A-Z]+\d+ "), 20),
     Category("Type errors", re.compile(r" - error: "), 15),

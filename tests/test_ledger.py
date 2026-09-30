@@ -99,6 +99,7 @@ TARGETS = {
     "units": "tests/test_targets.py::test_units_prints_every_unit",
     "wiring": "tests/test_wiring.py::test_the_wiring_target_passes_a_wired_project",
     "install": f"{CONSUMER_TESTS}::test_a_consumer_passes_ready",
+    "agent": "tests/test_agent.py::test_agent_links_the_rules_and_every_skill_into_the_harness",
     "clean": "tests/test_targets.py::test_clean_removes_build_output_and_caches",
     "update": f"{CONSUMER_TESTS}::test_update_relocks_and_syncs",
     "format": f"{PROMISE_TESTS}::test_format_rejects_unformatted_code",
@@ -126,24 +127,12 @@ SHARED_RULES = {
     "rule-no-comment-overreach": (
         f"{RULE_TESTS}::test_no_comment_overreach_rejects_a_name_out_of_reach"
     ),
-    "drift-agent": f"{RULE_TESTS}::test_skills_rejects_a_missing_link",
     "report-suppressions": f"{RULE_TESTS}::test_report_suppressions_counts_each_rule_and_file",
     "report-shared-names": (
         f"{RULE_TESTS}::test_report_shared_names_lists_each_name_with_its_locations"
     ),
     "rule-no-blanket-exemptions": f"{RULE_TESTS}::test_no_blanket_exemptions_rejects",
     "rule-no-hidden-names": f"{RULE_TESTS}::test_no_hidden_names_rejects",
-}
-
-# What the plugin delivers to an agent client, mapped the same way.
-PLUGIN: dict[str, str] = {
-    "version": "tests/test_plugin.py::test_the_plugin_is_versioned_with_the_package",
-    "skills": (
-        "tests/test_plugin.py::test_the_plugin_serves_the_shared_skills_from_their_one_copy"
-    ),
-    "marketplace": (
-        "tests/test_plugin.py::test_the_marketplace_lists_the_plugin_from_this_repository"
-    ),
 }
 
 # The general notes that precede the cycle, mapped the same way.
@@ -187,7 +176,6 @@ def test_every_named_test_exists() -> None:
     named = {test for tests in (*CHECKLIST.values(), *NOTES.values()) for test in tests}
     named.update(TARGETS.values())
     named.update(SHARED_RULES.values())
-    named.update(PLUGIN.values())
     missing = [
         test
         for test in sorted(named)

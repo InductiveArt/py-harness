@@ -15,13 +15,5 @@ def project(tmp_path: Path) -> Project:
     created.write("pyproject.toml", manifest())
     created.write("src/demo/__init__.py")
     created.write(".gitignore", "__pycache__/\n")
-    created.write("CLAUDE.md", f"@{SHARE / 'agent-rules.md'}\n")
-    instructions = created.root / ".github" / "instructions"
-    instructions.mkdir(parents=True)
-    (instructions / "py-harness.instructions.md").symlink_to(SHARE / "agent-rules.md")
-    links = created.root / ".claude" / "skills"
-    links.mkdir(parents=True)
-    for skill in sorted((SHARE / "skills").iterdir()):
-        (links / skill.name).symlink_to(skill)
     created.git("init", "-q")
     return created

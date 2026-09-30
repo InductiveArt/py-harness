@@ -21,8 +21,8 @@ from py_harness.suppressions import tally
 FIXES = ("lint-fix", "format-fix")
 CHECKS = ("format", "lint", "typecheck", "doctor")
 LOOPS: dict[str, tuple[str, ...]] = {
-    "check": (*FIXES, *CHECKS, "test"),
-    "ready": ("install", *FIXES, *CHECKS, "coverage"),
+    "check": ("agent", *FIXES, *CHECKS, "test"),
+    "ready": ("install", "agent", *FIXES, *CHECKS, "coverage"),
     "ci": ("install", *CHECKS, "coverage"),
 }
 

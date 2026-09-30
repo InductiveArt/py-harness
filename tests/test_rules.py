@@ -1,10 +1,8 @@
 import shutil
-from pathlib import Path
 
 import pytest
 
 from tests.support import DECLARED_LAYOUT
-from tests.support import SHARE
 from tests.support import Project
 from tests.support import declare_layout
 from tests.support import manifest
@@ -386,39 +384,6 @@ def test_no_comment_overreach_reads_tests_too(project: Project) -> None:
     )
 
 
-# #region skills
-
-
-def skill_link(project: Project) -> Path:
-    return project.root / ".claude" / "skills" / "commenting"
-
-
-def test_skills_rejects_a_missing_link(project: Project) -> None:
-    skill_link(project).unlink()
-    report = project.make("doctor", "RULE=agent").stdout
-    assert (
-        ".claude/skills/commenting is missing; create it with: mkdir -p .claude/skills && ln -s "
-        in report
-    )
-
-
-def test_skills_rejects_a_copy(project: Project) -> None:
-    link = skill_link(project)
-    link.unlink()
-    shutil.copytree(SHARE / "skills" / "commenting", link)
-    assert (
-        ".claude/skills/commenting is a copy; replace it with a link"
-        in project.make("doctor", "RULE=agent").stdout
-    )
-
-
-def test_skills_rejects_a_link_to_anything_else(project: Project) -> None:
-    link = skill_link(project)
-    link.unlink()
-    link.symlink_to(project.root / "src")
-    assert ".claude/skills/commenting links to " in project.make("doctor", "RULE=agent").stdout
-
-
 # #region Declared layout
 
 
@@ -523,36 +488,6 @@ def test_no_blanket_exemptions_accepts_line_level_suppressions(
     project.write("scripts/tool.py", source)
     report = project.make("doctor", "RULE=no-blanket-exemptions").stdout
     assert "doctor: no-blanket-exemptions OK" in report
-
-
-# #region agent
-
-
-def test_agent_rejects_instructions_that_do_not_import_the_rules(project: Project) -> None:
-    project.write("CLAUDE.md", "# Project notes\n")
-    report = project.make("doctor", "RULE=agent").stdout
-    assert "CLAUDE.md does not import the agent rules; add the line: @" in report
-
-
-def test_agent_accepts_the_import_from_the_claude_directory(project: Project) -> None:
-    (project.root / "CLAUDE.md").unlink()
-    project.write(".claude/CLAUDE.md", f"@{SHARE / 'agent-rules.md'}\n")
-    assert "doctor: agent OK" in project.make("doctor", "RULE=agent").stdout
-
-
-def test_agent_rejects_a_missing_rules_link_for_copilot(project: Project) -> None:
-    (project.root / ".github" / "instructions" / "py-harness.instructions.md").unlink()
-    report = project.make("doctor", "RULE=agent").stdout
-    assert (
-        ".github/instructions/py-harness.instructions.md is missing; create it with: mkdir -p"
-        in report
-    )
-
-
-def test_agent_rejects_an_import_of_another_file(project: Project) -> None:
-    project.write("CLAUDE.md", "@notes.md\n")
-    report = project.make("doctor", "RULE=agent").stdout
-    assert "CLAUDE.md does not import the agent rules" in report
 
 
 # #region report-suppressions

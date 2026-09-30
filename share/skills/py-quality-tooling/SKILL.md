@@ -1,5 +1,5 @@
 ---
-name: quality-tooling
+name: py-quality-tooling
 description: Use after changing code in a repository checked by py-harness and before saying the work is done; before running tests, lint, type checks, doctor or the check and ci loops; and when a check fails, to find the fix it expects.
 ---
 
@@ -19,9 +19,11 @@ description: Use after changing code in a repository checked by py-harness and b
 
 The three composed loops run these stages in this order, and keep going after a stage fails, so one run names every failing stage:
 
-- `check`: lint-fix, format-fix, format, lint, typecheck, doctor, test.
-- `ready`: install, lint-fix, format-fix, format, lint, typecheck, doctor, coverage.
+- `check`: agent, lint-fix, format-fix, format, lint, typecheck, doctor, test.
+- `ready`: install, agent, lint-fix, format-fix, format, lint, typecheck, doctor, coverage.
 - `ci`: install, format, lint, typecheck, doctor, coverage. It never rewrites a file, so what a fix would repair fails instead; it is what a CI server runs, after `uv sync --locked`.
+
+`agent` links the harness's rules and these skills into `.claude/`, pointing into the harness version the repository pins, and lists the links in `.git/info/exclude`, so no commit carries them.
 
 Each ends with a summary: the failing stages (and the unit, for a test stage), the diagnostics grouped by kind, the lines no test runs, every file the run rewrote, and the suppressions: how many the repository holds, how many the change since the last commit added or removed, the rules bypassed most, and each one added. The full log stays at `/tmp/<repository>-<loop>.log`. Read the summary first; open the log only when the summary says it saw nothing it could categorise.
 
@@ -95,7 +97,7 @@ Annotate every signature, and every value whose type inference cannot know (an e
 
 ## Doctor
 
-Shared checks: `no-cycles`, `no-reexport`, `no-hidden-names`, `no-comment-overreach`, `boundaries`, `no-secrets`, `no-blanket-exemptions`, `agent`, and two reports, which never fail. `suppressions` lists every bypass in the repository by rule and by file, with its density per 1,000 lines of Python. `shared-names` lists each public name defined in more than one module; judge each one: a copy to merge, two meanings to name apart, or a protocol shared on purpose. `agent` fails when `CLAUDE.md` does not import the harness's rules, or when the rules link for Copilot or a skill link is missing or copied. Imports under `if TYPE_CHECKING:` are the only ones `no-cycles` ignores; an import inside a function still closes a cycle.
+Shared checks: `no-cycles`, `no-reexport`, `no-hidden-names`, `no-comment-overreach`, `boundaries`, `no-secrets`, `no-blanket-exemptions`, and two reports, which never fail. `suppressions` lists every bypass in the repository by rule and by file, with its density per 1,000 lines of Python. `shared-names` lists each public name defined in more than one module; judge each one: a copy to merge, two meanings to name apart, or a protocol shared on purpose. Imports under `if TYPE_CHECKING:` are the only ones `no-cycles` ignores; an import inside a function still closes a cycle.
 
 Layer contracts go in `[tool.importlinter]` in the root `pyproject.toml`; `boundaries` enforces them, and says so when none are declared.
 
