@@ -78,6 +78,7 @@ CHECKLIST: dict[str, tuple[str, ...]] = {
     "verify.unit-test": (
         f"{STAGE_TESTS}::test_test_runs_the_tests_outside_integration",
         f"{STAGE_TESTS}::test_test_fails_on_a_failing_test",
+        f"{STAGE_TESTS}::test_test_files_may_share_a_name_in_different_folders",
     ),
     "verify.integration-test": (
         f"{STAGE_TESTS}::test_test_integration_runs_only_integration_tests",

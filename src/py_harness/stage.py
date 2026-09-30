@@ -18,7 +18,15 @@ from py_harness.units import normalized_name
 from py_harness.units import project_name
 from py_harness.units import resolve_units
 
-PYTEST = ("pytest", "--strict-markers", "--strict-config", "-o", "xfail_strict=true")
+# Each test file is imported by its path, so two in different folders may share a name.
+PYTEST = (
+    "pytest",
+    "--strict-markers",
+    "--strict-config",
+    "-o",
+    "xfail_strict=true",
+    "--import-mode=importlib",
+)
 # Arguments pytest takes from its caller's environment; only the harness decides which tests run.
 CALLER_ARGUMENTS = "PYTEST_ADDOPTS"
 NOTHING_COLLECTED = 5

@@ -45,6 +45,14 @@ def test_test_runs_the_tests_outside_integration(project: Project) -> None:
     assert "→ test ." in result.stdout
 
 
+def test_test_files_may_share_a_name_in_different_folders(project: Project) -> None:
+    project.write("tests/unit/test_same.py", PASSING)
+    project.write("tests/integration/test_same.py", PASSING)
+    result = project.make("test")
+    assert result.returncode == 0, result.stdout
+    assert "2 passed" in result.stdout
+
+
 def test_each_units_line_starts_a_paragraph(project: Project) -> None:
     project.write("tests/test_unit.py", PASSING)
     assert project.make("test").stdout.startswith("\n→ test .\n")

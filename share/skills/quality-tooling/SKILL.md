@@ -71,7 +71,7 @@ source = "src/main"
 testpaths = ["src/test"]
 ```
 
-Every stage and rule reads those two declarations: coverage measures the source, the doctor rules scan it, and the tests are what the unit's pytest configuration names. A test marked `integration` (`pytestmark = pytest.mark.integration` in its module, or the decorator) runs only in `test-integration`; `test` runs every other test, and `coverage` runs them all.
+Every stage and rule reads those two declarations: coverage measures the source, the doctor rules scan it, and the tests are what the unit's pytest configuration names. A test marked `integration` (`pytestmark = pytest.mark.integration` in its module, or the decorator) runs only in `test-integration`; `test` runs every other test, and `coverage` runs them all. Each test file is imported by its path: two files in different folders may share a name, and no test file imports another by its bare name, so shared test code goes in `conftest.py` fixtures.
 
 A new workspace member needs nothing beyond its entry in `[tool.uv.workspace] members`; `make units` shows it at once.
 
