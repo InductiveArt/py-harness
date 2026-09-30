@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "uv run --no-sync python -m py_harness.change_gate",
+        "timeout": 60
+      }
+    ]
+  }
+}

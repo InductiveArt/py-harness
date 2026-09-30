@@ -11,7 +11,7 @@ PY := $(RUN) python -m py_harness
 # Sets a stage's output off in the log, under the stage's name.
 announce = @printf '\n→ %s\n' '$@'
 
-.PHONY: help units wiring install agent clean update \
+.PHONY: help units wiring install agent audit clean update \
         format format-fix lint lint-fix lint-fix-unsafe \
         typecheck typecheck-pkg test test-pkg test-integration coverage \
         check ready ci doctor
@@ -27,6 +27,7 @@ help:
 	@echo "Install / cleanup:"
 	@echo "  install       uv sync exactly what uv.lock pins"
 	@echo "  agent         link the agent's rules and skills into .claude/, kept out of git"
+	@echo "  audit         what the agent gates decided in this clone, newest last"
 	@echo "  clean         remove every unit's dist/, the caches and .venv"
 	@echo "  update        upgrade uv.lock and sync"
 	@echo ""
@@ -70,6 +71,9 @@ install:
 agent:
 	$(announce)
 	@$(PY).agent $(HARNESS)
+
+audit:
+	@$(PY).audit
 
 clean:
 	@$(PY).units | while IFS= read -r unit; do rm -rf "$$unit/dist"; done

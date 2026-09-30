@@ -3,6 +3,7 @@ import shutil
 import subprocess
 from typing import cast
 
+from py_harness.audit import entries
 from tests.support import SHARE
 from tests.support import Project
 from tests.support import harness_environment
@@ -75,3 +76,14 @@ def test_the_shipped_vscode_hook_runs_the_gate() -> None:
             ]
         }
     }
+
+
+def test_the_gate_records_each_decision_in_the_trail(project: Project) -> None:
+    project.write("src/demo/loud.py", LOUD)
+    gate(project, '{"session_id": "s1", "stop_hook_active": false}')
+    gate(project, '{"session_id": "s1", "stop_hook_active": true}')
+    (project.root / "src" / "demo" / "loud.py").unlink()
+    project.write("tests/test_unit.py", "def test_passes() -> None:\n    assert True\n")
+    gate(project, '{"session_id": "s1", "stop_hook_active": false}')
+    assert [entry["decision"] for entry in entries(project.root)] == ["held", "released", "passed"]
+    assert "detail: STATUS: FAILED at stage `lint`" in project.make("audit").stdout

@@ -77,6 +77,40 @@ ln -s ../../.venv/share/py-harness/hooks/vscode.json .github/hooks/py-harness.js
 Before the project passes, the hook would send the agent after every existing
 finding instead of the task at hand, so it waits until then.
 
+A second hook, the change gate, is opt-in the same way. Before the agent
+creates a file, runs a destructive command (`rm`, `git reset --hard`, a
+force-push, ...) or edits the harness wiring (`pyproject.toml`, the
+Makefile), it holds the change once and asks the agent to tell you, in two or
+three lines, why and how to undo it; the retry goes through. In
+`.claude/settings.local.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-sync python -m py_harness.change_gate",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+For VS Code, link `.venv/share/py-harness/hooks/vscode-changes.json` into
+`.github/hooks/` beside the Stop gate's.
+
+Both gates record every decision in the clone's audit trail,
+`.git/py-harness/audit.jsonl`, never committed; when the change gate lets a
+held change through, the trail keeps what the agent said just before it.
+`make audit` prints the trail.
+
 Run `uv sync` once first: make cannot read the include before `.venv` exists.
 Then `make help` lists every target. The composed ones are named for the
 question each answers: `check` is "did I break what I just touched", `ready`

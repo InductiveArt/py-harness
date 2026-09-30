@@ -100,6 +100,7 @@ TARGETS = {
     "wiring": "tests/test_wiring.py::test_the_wiring_target_passes_a_wired_project",
     "install": f"{CONSUMER_TESTS}::test_a_consumer_passes_ready",
     "agent": "tests/test_agent.py::test_agent_links_the_rules_and_every_skill_into_the_harness",
+    "audit": "tests/test_change_gate.py::test_audit_prints_each_decision_and_what_was_said",
     "clean": "tests/test_targets.py::test_clean_removes_build_output_and_caches",
     "update": f"{CONSUMER_TESTS}::test_update_relocks_and_syncs",
     "format": f"{PROMISE_TESTS}::test_format_rejects_unformatted_code",
