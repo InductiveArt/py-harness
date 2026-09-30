@@ -110,11 +110,6 @@ def append(transcript: Path, *events: dict[str, object]) -> None:
         file.writelines(json.dumps(event) + "\n" for event in events)
 
 
-def said(words: str) -> dict[str, object]:
-    """What the agent wrote as text."""
-    return {"type": "assistant", "message": {"content": [{"type": "text", "text": words}]}}
-
-
 def typed(words: str) -> dict[str, object]:
     """What the user wrote."""
     return {"type": "user", "message": {"content": words}}

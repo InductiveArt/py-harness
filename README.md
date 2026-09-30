@@ -86,24 +86,14 @@ force-push, ...).
   it: three words at least, found in what you typed or picked in answer to the
   agent's question. A command you never asked for has nothing to quote, so the
   agent has to ask you first.
-- A new file or a wiring edit is held once, for the agent to think it
-  through; its retry goes through.
-- At the end of each turn, the Stop gate compares the working tree with how
-  the session found it. Every new file, deletion and wiring edit, however it
-  was made, needs a block in the agent's closing message, and a deletion or a
-  wiring edit quotes you:
-
-```text
-CHANGE: pyproject.toml
-WHY: what changes in how the harness runs here
-UNDO: the command that reverses it
-ASKED: your own words asking for it, copied exactly
-```
-
-Until the blocks are there the turn is held; its second stop lets it go,
-marked untold in the trail. The closing message is where the agent's words
-reach you as written: what it writes between tool calls is often kept as its
-reasoning, reworded, so it does not count. In `.claude/settings.local.json`:
+- A new file or a wiring edit made with a file tool is held once, for the
+  agent to state the facts that bear on it: who will use a new file and which
+  existing module could hold it instead. The facts are for the agent's own
+  context; none of it is checked, and the retry goes through.
+- When a turn ends, the Stop gate compares the working tree with how the
+  session found it and shows you every new file, deletion and wiring edit,
+  however it was made, shell commands included. It comes from git, not from
+  the agent, so it cannot leave one out. In `.claude/settings.local.json`:
 
 ```json
 {
@@ -129,8 +119,8 @@ For VS Code, link `.venv/share/py-harness/hooks/vscode-changes.json` into
 
 Both gates record every decision in the clone's audit trail,
 `.git/py-harness/audit.jsonl`, never committed; when the change gate lets a
-destructive command through, the trail keeps your words it quoted, and for
-each change the block that told you.
+destructive command through, the trail keeps your words it quoted, and it
+keeps every change the Stop gate showed you.
 `make audit` prints the trail.
 
 Run `uv sync` once first: make cannot read the include before `.venv` exists.
@@ -200,10 +190,12 @@ What no check catches, so a passing run does not claim it:
   finds the other ways a name is hidden.
 - A `conftest.py` hook that deselects tests. Settings that do so are refused;
   code that does is not.
-- Whether a change gate block is true. The gate checks that the block reached
-  you and that its quote is yours, not that the quote fits the change.
+- Whether a quote fits the change. The gate checks that the words are yours,
+  not that they ask for this command.
 - Holds in a client that names no transcript. The retry goes through, marked
   unverified in the trail.
+- The list of changes in the editor. It reaches you through the client's
+  `systemMessage`, which no editor session has shown yet.
 - An untracked file deleted by a command the destructive patterns miss. The
   end of the turn cannot see it: git never knew the file.
 - Changes you make yourself while the agent works. The end of the turn counts

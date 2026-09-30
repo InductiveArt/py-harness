@@ -154,9 +154,17 @@ def test_a_quote_the_user_never_wrote_is_held(project: Project, transcript: Path
         skill,
         {**ran, "toolUseResult": "remove the scratch file"},
         {**ran, "toolUseResult": {"stdout": "remove the scratch file"}},
+        {"type": "user", "message": {}},
     )
     payload = removal(transcript, 'Delete old.py: "remove the scratch file"')
     assert hook(project.root, payload).returncode == HELD
+
+
+def test_the_users_words_in_a_message_of_blocks_count(project: Project, transcript: Path) -> None:
+    pasted = [{"type": "text", "text": "Please remove the old module now."}]
+    append(transcript, {"type": "user", "message": {"content": pasted}})
+    payload = removal(transcript, 'Delete old.py: "remove the old module"')
+    assert hook(project.root, payload).returncode == 0
 
 
 def test_a_quote_under_three_words_is_held(project: Project, transcript: Path) -> None:

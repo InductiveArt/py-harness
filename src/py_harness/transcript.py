@@ -24,16 +24,6 @@ def transcript(payload: dict[str, object]) -> list[Event] | None:
     return [cast("Event", json.loads(line)) for line in lines if line]
 
 
-def said_since(events: list[Event], mark: int) -> list[str]:
-    """What the agent wrote as text after the mark; what it only reasoned is another block."""
-    return [
-        message
-        for event in events[mark:]
-        if event.get("type") == "assistant"
-        for message in texts(event)
-    ]
-
-
 def quoted(passage: str, events: list[Event]) -> str:
     """The user's own words the passage gives, whole or in double quotes; empty when none."""
     candidates = [passage, *(match[1] for match in QUOTED.finditer(passage))]

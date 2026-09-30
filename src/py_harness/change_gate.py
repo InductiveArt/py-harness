@@ -45,19 +45,10 @@ DESTRUCTIVE = (
 PATCHED_FILE = re.compile(
     r"^\*\*\* (?P<action>Add|Update|Delete) File: (?P<path>.+)$", re.MULTILINE
 )
-QUESTIONS = {
-    "new file": "what will use it, and why no existing module fits",
-    "destructive": "what it deletes or discards, and why",
-    "wiring": "what changes in how the harness runs here",
-}
 # What the agent states before the change, for its own context: none of it is checked.
 FACTS = {
     "new file": "who will use it, and which existing module could hold it instead: search for one",
     "wiring": "what changes in how the harness runs here, and the user's words asking for it",
-}
-HINTS = {
-    "undo": "the command that reverses it",
-    "asked": "the user's own words asking for it, copied exactly",
 }
 UNQUOTED = "its description quotes nothing the user said"
 NO_TRANSCRIPT = "no transcript shows what the user said"
@@ -67,27 +58,10 @@ BASELINES = "baselines"
 @dataclass(frozen=True)
 class Change:
     trigger: str
-    # The file for a file, the command for a command: what the block's CHANGE line names.
+    # The file for a file, the command for a command.
     target: str
     # The change as the user reads it: creating, editing or deleting a file, or running a command.
     doing: str
-
-    @property
-    def needs_the_users_words(self) -> bool:
-        """Where new code lives is the agent's call; deleting or rewiring is the user's to ask."""
-        return self.trigger != "new file"
-
-    @property
-    def fields(self) -> tuple[str, ...]:
-        return ("why", "undo", "asked") if self.needs_the_users_words else ("why", "undo")
-
-    def template(self) -> list[str]:
-        """The block that tells the user about the change, its CHANGE line filled in."""
-        hints = {**HINTS, "why": QUESTIONS[self.trigger]}
-        return [
-            f"CHANGE: {self.target}",
-            *(f"{key.upper()}: <{hints[key]}>" for key in self.fields),
-        ]
 
 
 def main() -> int:

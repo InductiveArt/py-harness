@@ -1,21 +1,15 @@
 import json
 import shutil
 import subprocess
-from pathlib import Path
 from typing import cast
-
-import pytest
 
 from py_harness.audit import entries
 from py_harness.change_gate import Change
 from py_harness.change_gate import remember
-from py_harness.stop_gate import untold
-from tests.support import QUOTE
+from py_harness.stop_gate import unshown
 from tests.support import SHARE
 from tests.support import Project
-from tests.support import append
 from tests.support import harness_environment
-from tests.support import said
 
 HELD = 2
 LOUD = 'print("hello")\n'
@@ -72,17 +66,6 @@ def test_the_gate_reports_a_check_that_cannot_start(project: Project) -> None:
     assert "No rule to make target" in result.stderr
 
 
-def test_an_untold_change_holds_the_stop_even_when_the_check_passes(project: Project) -> None:
-    remember(project.root, "s1")
-    project.write("tests/test_unit.py", "def test_passes() -> None:\n    assert True\n")
-    result = gate(project, '{"session_id": "s1", "stop_hook_active": false}')
-    assert result.returncode == HELD
-    assert "creating tests/test_unit.py was done, but" in result.stderr
-    held = entries(project.root)[-1]
-    assert (held["hook"], held["decision"]) == ("stop-gate", "held")
-    assert held["detail"] == "changes no block told the user about"
-
-
 def test_the_shipped_vscode_hook_runs_the_gate() -> None:
     hook = cast("object", json.loads((SHARE / "hooks" / "vscode.json").read_text()))
     assert hook == {
@@ -109,40 +92,53 @@ def test_the_gate_records_each_decision_in_the_trail(project: Project) -> None:
     assert "detail: STATUS: FAILED at stage `lint`" in project.make("audit").stdout
 
 
-# #region Telling the user at the end of the turn
-
-
-def stop(transcript: Path, session: str = "s1") -> dict[str, object]:
-    return {"session_id": session, "transcript_path": str(transcript)}
+# #region Showing the user what the turn changed
 
 
 def found(changes: list[Change]) -> set[tuple[str, str]]:
     return {(change.trigger, change.target) for change in changes}
 
 
-def block(target: str, asked: str = "") -> str:
-    lines = [f"CHANGE: {target}", "WHY: the parser reads it", "UNDO: git rm it"]
-    return "\n".join([*lines, f"ASKED: {asked}"] if asked else lines)
+def shown(*lines: str) -> str:
+    """The gate's request that the client show the user these lines."""
+    message = "".join(f"\n  {line}" for line in lines)
+    return json.dumps({"systemMessage": f"py-harness, what this turn changed:{message}"}) + "\n"
 
 
-def made(project: Project, relative: str = "src/demo/made.py") -> None:
-    """A change the session makes after its baseline, as a shell command would."""
+def test_a_passing_stop_shows_the_user_what_the_turn_changed(project: Project) -> None:
     remember(project.root, "s1")
-    project.write(relative)
+    project.write("tests/test_unit.py", "def test_passes() -> None:\n    assert True\n")
+    result = gate(project, '{"session_id": "s1", "stop_hook_active": false}')
+    assert result.returncode == 0
+    assert result.stdout == shown("created tests/test_unit.py")
 
 
-def test_a_file_a_command_made_is_held_at_the_end_of_the_turn(
-    project: Project, transcript: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    made(project)
-    held = untold(project.root, stop(transcript), final=False)
-    assert found(held) == {("new file", "src/demo/made.py")}
-    stderr = capsys.readouterr().err
-    assert "creating src/demo/made.py was done, but no text reached the user" in stderr
-    assert "CHANGE: src/demo/made.py\nWHY: <what will use it" in stderr
+def test_the_stop_that_ends_a_held_turn_shows_it_too(project: Project) -> None:
+    remember(project.root, "s1")
+    project.write("src/demo/loud.py", LOUD)
+    result = gate(project, '{"session_id": "s1", "stop_hook_active": true}')
+    assert result.stdout == shown("created src/demo/loud.py")
 
 
-def test_the_end_of_the_turn_finds_every_kind_of_change(project: Project, transcript: Path) -> None:
+def test_a_held_stop_shows_nothing_yet(project: Project) -> None:
+    remember(project.root, "s1")
+    project.write("src/demo/loud.py", LOUD)
+    result = gate(project, '{"session_id": "s1", "stop_hook_active": false}')
+    assert result.returncode == HELD
+    assert result.stdout == ""
+
+
+def test_a_change_is_shown_once_until_it_changes_again(project: Project) -> None:
+    project.commit()
+    remember(project.root, "s1")
+    project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
+    assert found(unshown(project.root, "s1")) == {("wiring", "pyproject.toml")}
+    assert unshown(project.root, "s1") == []
+    project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
+    assert found(unshown(project.root, "s1")) == {("wiring", "pyproject.toml")}
+
+
+def test_every_kind_of_change_is_shown(project: Project) -> None:
     project.write("src/demo/gone.py")
     project.write("src/demo/removed.py")
     project.commit()
@@ -154,7 +150,7 @@ def test_the_end_of_the_turn_finds_every_kind_of_change(project: Project, transc
     project.git("add", "src/demo/staged.py")
     project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
     project.write("src/demo/__init__.py", "VALUE = 1\n")
-    assert found(untold(project.root, stop(transcript), final=False)) == {
+    assert found(unshown(project.root, "s1")) == {
         ("destructive", "src/demo/gone.py"),
         ("destructive", "src/demo/removed.py"),
         ("new file", "src/demo/made.py"),
@@ -163,152 +159,28 @@ def test_the_end_of_the_turn_finds_every_kind_of_change(project: Project, transc
     }
 
 
-def test_what_the_tree_held_when_the_session_began_is_not_held(
-    project: Project, transcript: Path
-) -> None:
+def test_what_the_tree_held_when_the_session_began_is_not_shown(project: Project) -> None:
     project.write("notes.txt", "mine\n")
     remember(project.root, "s1")
-    assert untold(project.root, stop(transcript), final=False) == []
+    assert unshown(project.root, "s1") == []
 
 
-def test_without_a_baseline_the_end_of_the_turn_judges_nothing(
-    project: Project, transcript: Path
-) -> None:
-    project.write("src/demo/made.py")
-    assert untold(project.root, stop(transcript), final=False) == []
-
-
-def test_an_unreadable_index_judges_nothing(project: Project, transcript: Path) -> None:
-    made(project)
-    (project.root / ".git" / "index").write_text("not an index")
-    assert untold(project.root, stop(transcript), final=False) == []
-    remember(project.root, "s2")
-    assert not (project.root / ".git" / "py-harness" / "baselines" / "s2.json").exists()
-
-
-def test_a_block_in_the_closing_message_releases_the_change(
-    project: Project, transcript: Path
-) -> None:
-    made(project)
-    untold(project.root, stop(transcript), final=False)
-    append(transcript, said(f"Done.\n\n{block('src/demo/made.py')}"))
-    assert untold(project.root, stop(transcript), final=True) == []
-    assert entries(project.root)[-1]["why"] == "the parser reads it"
-
-
-def test_the_closing_message_counts_before_the_transcript_holds_it(
-    project: Project, transcript: Path
-) -> None:
-    made(project)
-    closing = {**stop(transcript), "last_assistant_message": block("src/demo/made.py")}
-    assert untold(project.root, closing, final=False) == []
-
-
-def test_a_block_written_earlier_in_the_session_counts(project: Project, transcript: Path) -> None:
-    made(project)
-    append(transcript, said(block("src/demo/made.py")))
-    assert untold(project.root, stop(transcript), final=False) == []
-
-
-def test_a_change_told_once_is_not_judged_again(project: Project, transcript: Path) -> None:
-    made(project)
-    append(transcript, said(block("src/demo/made.py")))
-    untold(project.root, stop(transcript), final=False)
-    recorded = entries(project.root)
-    project.write("src/demo/made.py", "VALUE = 2\n")
-    assert untold(project.root, stop(transcript), final=False) == []
-    assert entries(project.root) == recorded
-
-
-def test_editing_a_file_the_session_found_untracked_is_not_creating_it(
-    project: Project, transcript: Path
-) -> None:
+def test_editing_a_file_the_session_found_untracked_is_not_creating_it(project: Project) -> None:
     project.write("src/demo/draft.py")
     remember(project.root, "s1")
     project.write("src/demo/draft.py", "VALUE = 1\n")
-    assert untold(project.root, stop(transcript), final=False) == []
+    assert unshown(project.root, "s1") == []
 
 
-def test_reasoning_does_not_tell_the_user(project: Project, transcript: Path) -> None:
-    made(project)
-    reasoning = {"type": "thinking", "thinking": block("src/demo/made.py")}
-    append(
-        transcript,
-        {"type": "assistant", "message": {"content": [reasoning]}},
-        {"type": "assistant", "message": "not an object"},
-        {"type": "assistant", "message": {}},
-    )
-    assert len(untold(project.root, stop(transcript), final=False)) == 1
-    assert entries(project.root)[-1]["detail"] == (
-        "no text reached the user; reasoning does not count"
-    )
+def test_without_a_baseline_nothing_is_shown(project: Project) -> None:
+    project.write("src/demo/made.py")
+    assert unshown(project.root, "s1") == []
 
 
-def test_a_block_for_another_change_does_not_count(project: Project, transcript: Path) -> None:
-    made(project)
-    append(transcript, said(block("src/demo/other.py")))
-    assert len(untold(project.root, stop(transcript), final=False)) == 1
-
-
-def test_the_field_lines_must_sit_right_under_the_change_line(
-    project: Project, transcript: Path
-) -> None:
-    made(project)
-    append(transcript, said("WHY: early\nCHANGE: src/demo/made.py\n\nWHY: late\nUNDO: late"))
-    untold(project.root, stop(transcript), final=False)
-    assert entries(project.root)[-1]["detail"] == "the block leaves WHY and UNDO empty"
-
-
-def test_a_value_may_be_wrapped_in_backticks(project: Project, transcript: Path) -> None:
-    made(project)
-    append(transcript, said(block("`src/demo/made.py`")))
-    assert untold(project.root, stop(transcript), final=False) == []
-
-
-def test_only_marks_around_the_whole_value_are_dropped(project: Project, transcript: Path) -> None:
-    made(project)
-    append(transcript, said("CHANGE: src/demo/made.py\nWHY: `slugify` needs a home\nUNDO: x"))
-    untold(project.root, stop(transcript), final=False)
-    assert entries(project.root)[-1]["why"] == "`slugify` needs a home"
-
-
-def test_a_config_edit_is_told_with_the_users_own_words(project: Project, transcript: Path) -> None:
+def test_an_unreadable_index_shows_nothing(project: Project) -> None:
     remember(project.root, "s1")
-    project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
-    append(transcript, said(block("pyproject.toml", asked="rewire the build")))
-    untold(project.root, stop(transcript), final=False)
-    assert entries(project.root)[-1]["detail"] == "its ASKED line: the user said none of it"
-    append(transcript, said(block("pyproject.toml", asked=QUOTE)))
-    assert untold(project.root, stop(transcript), final=False) == []
-    assert entries(project.root)[-1]["asked"] == "delete it, then add the parser"
-
-
-def test_an_asked_line_may_quote_the_user_among_its_own_words(
-    project: Project, transcript: Path
-) -> None:
-    remember(project.root, "s1")
-    project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
-    asked = f"{QUOTE} (your words when I asked)"
-    append(transcript, said(block("pyproject.toml", asked=asked)))
-    assert untold(project.root, stop(transcript), final=False) == []
-    assert entries(project.root)[-1]["asked"] == "delete it, then add the parser"
-
-
-def test_the_final_stop_releases_what_is_still_untold_and_marks_it(
-    project: Project, transcript: Path
-) -> None:
-    made(project)
-    untold(project.root, stop(transcript), final=False)
-    assert untold(project.root, stop(transcript), final=True) == []
-    released = entries(project.root)[-1]
-    assert (released["decision"], released["detail"]) == (
-        "released",
-        "untold: no text reached the user; reasoning does not count",
-    )
-
-
-def test_without_a_transcript_the_end_of_the_turn_holds_once(project: Project) -> None:
-    made(project)
-    assert len(untold(project.root, {"session_id": "s1"}, final=False)) == 1
-    assert untold(project.root, {"session_id": "s1"}, final=True) == []
-    assert entries(project.root)[-1]["detail"].startswith("unverified")
+    project.write("src/demo/made.py")
+    (project.root / ".git" / "index").write_text("not an index")
+    assert unshown(project.root, "s1") == []
+    remember(project.root, "s2")
+    assert not (project.root / ".git" / "py-harness" / "baselines" / "s2.json").exists()
