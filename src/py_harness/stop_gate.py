@@ -81,6 +81,8 @@ def untold(root: Path, payload: dict[str, object], *, final: bool) -> list[Chang
     """
     session = text(payload, "session_id") or "unknown"
     events = transcript(payload)
+    # The client writes the closing message to the transcript only after this hook reads it.
+    closing = text(payload, "last_assistant_message")
     recorded = entries(root)
     pending: list[Change] = []
     for change in outcome(root, session):
@@ -88,7 +90,7 @@ def untold(root: Path, payload: dict[str, object], *, final: bool) -> list[Chang
         last = latest(recorded, entry)
         if last.get("decision") == "released":
             continue
-        missing = answered(root, entry, change, events, last)
+        missing = answered(root, entry, change, events, last, closing)
         if not missing:
             continue
         if final:
@@ -123,7 +125,7 @@ def since(action: str, found: bool) -> str:
 
 
 def answered(
-    root: Path, entry: Entry, change: Change, events: list[Event] | None, last: Entry
+    root: Path, entry: Entry, change: Change, events: list[Event] | None, last: Entry, closing: str
 ) -> str:
     """Releases the change once the agent's text carries its block; else says what is missing.
 
@@ -134,7 +136,7 @@ def answered(
         return ""
     if events is None:
         return NO_TRANSCRIPT
-    said = said_since(events, int(last.get("mark") or 0))
+    said = [*said_since(events, int(last.get("mark") or 0)), *([closing] if closing else [])]
     block = answer(change, said)
     missing = shortfall(change, said, block, events)
     if not missing:

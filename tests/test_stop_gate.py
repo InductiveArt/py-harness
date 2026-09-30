@@ -196,6 +196,14 @@ def test_a_block_in_the_closing_message_releases_the_change(
     assert entries(project.root)[-1]["why"] == "the parser reads it"
 
 
+def test_the_closing_message_counts_before_the_transcript_holds_it(
+    project: Project, transcript: Path
+) -> None:
+    made(project)
+    closing = {**stop(transcript), "last_assistant_message": block("src/demo/made.py")}
+    assert untold(project.root, closing, final=False) == []
+
+
 def test_a_block_written_earlier_in_the_session_counts(project: Project, transcript: Path) -> None:
     made(project)
     append(transcript, said(block("src/demo/made.py")))
