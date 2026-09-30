@@ -174,8 +174,14 @@ def blocks(said: list[str]) -> list[Entry]:
             if field is None or current is None:
                 current = None
             else:
-                current[field["name"].lower()] = " ".join(field["value"].split()).strip(MARKS)
+                current[field["name"].lower()] = unwrapped(" ".join(field["value"].split()))
     return found
+
+
+def unwrapped(value: str) -> str:
+    """The value without the quote marks or backticks around the whole of it, if any."""
+    wrapped = len(value) > 1 and value[0] in MARKS and value[-1] in MARKS
+    return value[1:-1] if wrapped else value
 
 
 def shortfall(change: Change, said: list[str], block: Entry, events: list[Event]) -> str:

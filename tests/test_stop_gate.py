@@ -265,6 +265,13 @@ def test_a_value_may_be_wrapped_in_backticks(project: Project, transcript: Path)
     assert untold(project.root, stop(transcript), final=False) == []
 
 
+def test_only_marks_around_the_whole_value_are_dropped(project: Project, transcript: Path) -> None:
+    made(project)
+    append(transcript, said("CHANGE: src/demo/made.py\nWHY: `slugify` needs a home\nUNDO: x"))
+    untold(project.root, stop(transcript), final=False)
+    assert entries(project.root)[-1]["why"] == "`slugify` needs a home"
+
+
 def test_a_config_edit_is_told_with_the_users_own_words(project: Project, transcript: Path) -> None:
     remember(project.root, "s1")
     project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
