@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import TypeAlias
 from typing import cast
@@ -8,6 +9,8 @@ Event: TypeAlias = dict[str, object]
 
 # Fewer words than this match some message by chance.
 QUOTE_WORDS = 3
+# A span in straight or curly double quotes.
+QUOTED = re.compile(r'["\u201c]([^"\u201d]+)["\u201d]')
 UNVERIFIED = "unverified: the client names no transcript to check"
 
 
@@ -29,6 +32,13 @@ def said_since(events: list[Event], mark: int) -> list[str]:
         if event.get("type") == "assistant"
         for message in texts(event)
     ]
+
+
+def quoted(passage: str, events: list[Event]) -> str:
+    """The user's own words the passage gives, whole or in double quotes; empty when none."""
+    candidates = [passage, *(match[1] for match in QUOTED.finditer(passage))]
+    found = [candidate for candidate in candidates if not misquoted(candidate, events)]
+    return " ".join(found[0].split()) if found else ""
 
 
 def misquoted(quote: str, events: list[Event]) -> str:

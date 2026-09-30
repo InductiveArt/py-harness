@@ -15,7 +15,7 @@ from py_harness.loop import digest
 from py_harness.suppressions import git
 from py_harness.transcript import UNVERIFIED
 from py_harness.transcript import Event
-from py_harness.transcript import misquoted
+from py_harness.transcript import quoted
 from py_harness.transcript import text
 from py_harness.transcript import transcript
 
@@ -45,8 +45,6 @@ DESTRUCTIVE = (
 PATCHED_FILE = re.compile(
     r"^\*\*\* (?P<action>Add|Update|Delete) File: (?P<path>.+)$", re.MULTILINE
 )
-# A span of a description in straight or curly double quotes.
-QUOTED = re.compile(r'["\u201c]([^"\u201d]+)["\u201d]')
 QUESTIONS = {
     "new file": "what will use it, and why no existing module fits",
     "destructive": "what it deletes or discards, and why",
@@ -177,10 +175,9 @@ def confirmed(
     if events is None and last.get("decision") == "held":
         record(root, {**entry, "decision": "released", "detail": UNVERIFIED})
         return True
-    quotes = [] if events is None else [match[1] for match in QUOTED.finditer(described)]
-    asked = [quote for quote in quotes if events is not None and not misquoted(quote, events)]
+    asked = "" if events is None else quoted(described, events)
     if asked:
-        record(root, {**entry, "decision": "released", "asked": " ".join(asked[0].split())})
+        record(root, {**entry, "decision": "released", "asked": asked})
         return True
     reason = NO_TRANSCRIPT if events is None else UNQUOTED
     record(root, {**entry, "decision": "held", "detail": reason})

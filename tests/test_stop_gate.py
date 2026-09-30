@@ -283,6 +283,17 @@ def test_a_config_edit_is_told_with_the_users_own_words(project: Project, transc
     assert entries(project.root)[-1]["asked"] == "delete it, then add the parser"
 
 
+def test_an_asked_line_may_quote_the_user_among_its_own_words(
+    project: Project, transcript: Path
+) -> None:
+    remember(project.root, "s1")
+    project.write("pyproject.toml", project.read("pyproject.toml") + "\n")
+    asked = f"{QUOTE} (your words when I asked)"
+    append(transcript, said(block("pyproject.toml", asked=asked)))
+    assert untold(project.root, stop(transcript), final=False) == []
+    assert entries(project.root)[-1]["asked"] == "delete it, then add the parser"
+
+
 def test_the_final_stop_releases_what_is_still_untold_and_marks_it(
     project: Project, transcript: Path
 ) -> None:

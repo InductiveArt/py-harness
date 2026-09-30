@@ -20,6 +20,7 @@ from py_harness.loop import snapshot
 from py_harness.transcript import UNVERIFIED
 from py_harness.transcript import Event
 from py_harness.transcript import misquoted
+from py_harness.transcript import quoted
 from py_harness.transcript import said_since
 from py_harness.transcript import text
 from py_harness.transcript import transcript
@@ -141,7 +142,8 @@ def answered(
     missing = shortfall(change, said, block, events)
     if not missing:
         told = {field: block[field] for field in change.fields}
-        record(root, {**entry, "decision": "released", **told})
+        words = {"asked": quoted(block["asked"], events)} if change.needs_the_users_words else {}
+        record(root, {**entry, "decision": "released", **told, **words})
     return missing
 
 
@@ -193,8 +195,9 @@ def shortfall(change: Change, said: list[str], block: Entry, events: list[Event]
     empty = [field.upper() for field in change.fields if not block.get(field)]
     if empty:
         return f"the block leaves {' and '.join(empty)} empty"
-    wrong = misquoted(block["asked"], events) if change.needs_the_users_words else ""
-    return f"its ASKED line: {wrong}" if wrong else ""
+    if not change.needs_the_users_words or quoted(block["asked"], events):
+        return ""
+    return f"its ASKED line: {misquoted(block['asked'], events)}"
 
 
 if __name__ == "__main__":
