@@ -93,9 +93,10 @@ def main() -> int:
 
 def changes(tool: str, arguments: dict[str, object], root: Path) -> list[Change]:
     if tool in SHELL:
-        command = " ".join(text(arguments, "command").split())[:200]
+        command = " ".join(text(arguments, "command").split())
         destructive = any(pattern.search(command) for pattern in DESTRUCTIVE)
-        return [Change("destructive", command, f"running `{command}`")] if destructive else []
+        shown = command[:200]
+        return [Change("destructive", shown, f"running `{shown}`")] if destructive else []
     if tool == PATCHING:
         patched = PATCHED_FILE.finditer(text(arguments, "input"))
         return [

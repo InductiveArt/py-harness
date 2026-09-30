@@ -10,6 +10,7 @@ from tests.support import Project
 
 HELD = 2
 PROMPT = "Tidy up: src/demo/old.py is no longer wanted, delete it,\nthen add the parser."
+LONG_COMMAND = f"echo {'x' * 300}; rm x.py"
 QUOTE = "\u201cdelete it, then add the parser\u201d"
 
 
@@ -79,6 +80,7 @@ def test_an_edit_to_an_existing_file_passes_unrecorded(project: Project) -> None
         "git stash drop",
         "git branch -D topic",
         "(cd src && rm x.py)",
+        pytest.param(LONG_COMMAND, id="past-the-part-a-hold-shows"),
     ],
 )
 def test_each_destructive_command_is_held(project: Project, command: str) -> None:
