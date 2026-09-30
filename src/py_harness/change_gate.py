@@ -4,13 +4,18 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeAlias
 from typing import cast
 
+from py_harness.audit import Entry
 from py_harness.audit import entries
 from py_harness.audit import record
 from py_harness.audit import trail
 from py_harness.console import err
 from py_harness.stop_gate import KEEP_WORKING
+
+# One line of the client's session transcript.
+Event: TypeAlias = dict[str, object]
 
 # Tool names as the terminal agent and the editor's chat agent send them.
 CREATING = frozenset({"Write", "create_file"})
@@ -21,31 +26,41 @@ SHELL = frozenset({"Bash", "run_in_terminal"})
 PATCHING = "apply_patch"
 WIRING = frozenset({"pyproject.toml", "Makefile"})
 DESTRUCTIVE = (
-    ("rm", re.compile(r"(?:^|[\s;&|(])rm\s")),
-    ("git reset --hard", re.compile(r"\bgit\s+reset\b[^;&|]*--hard")),
-    ("git clean", re.compile(r"\bgit\s+clean\b")),
-    ("git push --force", re.compile(r"\bgit\s+push\b[^;&|]*(?:--force|\s-f\b)")),
-    ("git checkout --", re.compile(r"\bgit\s+checkout\s+--")),
-    ("git restore", re.compile(r"\bgit\s+restore\b(?![^;&|]*--staged)")),
-    ("git stash drop", re.compile(r"\bgit\s+stash\s+(?:drop|clear)\b")),
-    ("git branch -D", re.compile(r"\bgit\s+branch\s+-D\b")),
+    re.compile(r"(?:^|[\s;&|(])rm\s"),
+    re.compile(r"\bgit\s+reset\b[^;&|]*--hard"),
+    re.compile(r"\bgit\s+clean\b"),
+    re.compile(r"\bgit\s+push\b[^;&|]*(?:--force|\s-f\b)"),
+    re.compile(r"\bgit\s+checkout\s+--"),
+    re.compile(r"\bgit\s+restore\b(?![^;&|]*--staged)"),
+    re.compile(r"\bgit\s+stash\s+(?:drop|clear)\b"),
+    re.compile(r"\bgit\s+branch\s+-D\b"),
 )
 PATCHED_FILE = re.compile(
     r"^\*\*\* (?P<action>Add|Update|Delete) File: (?P<path>.+)$", re.MULTILINE
 )
 QUESTIONS = {
     "new file": "what will use it, and why no existing module fits",
-    "destructive": "what it deletes or discards, and the one-line undo",
-    "wiring": "what changes in how the harness runs here, and the user's words asking for it",
+    "destructive": "what it deletes or discards, and why",
+    "wiring": "what changes in how the harness runs here",
 }
-SAID_LIMIT = 600
+HINTS = {
+    "undo": "the command that reverses it",
+    "asked": "the user's own words asking for it, copied exactly",
+}
+NEVER_ASKED = "If the user never asked for this, do not make it: ask them, or leave it and say so."
+# One line of the block the agent writes to the user before a held change goes through.
+FIELD = re.compile(r"^(?P<name>CHANGE|WHY|UNDO|ASKED): *(?P<value>.*)$")
+# What an agent wraps a value in when it writes it as prose.
+MARKS = "`\"'\u201c\u201d\u2018\u2019"
+# Fewer words than this match some message by chance.
+QUOTE_WORDS = 3
+UNVERIFIED = "unverified: the client names no transcript to check"
 
 
 @dataclass(frozen=True)
 class Change:
     trigger: str
-    # What a hold is matched by: the file for a file, the kind of command for a command.
-    key: str
+    # The file for a file, the command for a command: what the block's CHANGE line names.
     target: str
     # The change as the user reads it: creating, editing or deleting a file, or running a command.
     doing: str
@@ -54,6 +69,15 @@ class Change:
     def lasts_the_session(self) -> bool:
         """A file answered for once stays answered; each destructive command answers anew."""
         return self.trigger != "destructive"
+
+    @property
+    def needs_the_users_words(self) -> bool:
+        """Where new code lives is the agent's call; deleting or rewiring is the user's to ask."""
+        return self.trigger != "new file"
+
+    @property
+    def fields(self) -> tuple[str, ...]:
+        return ("why", "undo", "asked") if self.needs_the_users_words else ("why", "undo")
 
 
 def main() -> int:
@@ -69,12 +93,9 @@ def main() -> int:
 
 def changes(tool: str, arguments: dict[str, object], root: Path) -> list[Change]:
     if tool in SHELL:
-        command = " ".join(text(arguments, "command").split())
-        kinds = [label for label, pattern in DESTRUCTIVE if pattern.search(command)]
-        return [
-            Change("destructive", kind, command[:200], f"running `{command[:200]}`")
-            for kind in kinds[:1]
-        ]
+        command = " ".join(text(arguments, "command").split())[:200]
+        destructive = any(pattern.search(command) for pattern in DESTRUCTIVE)
+        return [Change("destructive", command, f"running `{command}`")] if destructive else []
     if tool == PATCHING:
         patched = PATCHED_FILE.finditer(text(arguments, "input"))
         return [
@@ -91,89 +112,144 @@ def changes(tool: str, arguments: dict[str, object], root: Path) -> list[Change]
 def file_change(action: str, path: str, root: Path) -> list[Change]:
     relative = Path(os.path.relpath(Path(root, path), root)).as_posix()
     if action == "Delete":
-        return [Change("destructive", f"delete {relative}", relative, f"deleting {relative}")]
+        return [Change("destructive", relative, f"deleting {relative}")]
     if action == "Add" and not (root / relative).exists():
-        return [Change("new file", relative, relative, f"creating {relative}")]
+        return [Change("new file", relative, f"creating {relative}")]
     if Path(relative).name in WIRING:
-        return [Change("wiring", relative, relative, f"editing {relative}")]
+        return [Change("wiring", relative, f"editing {relative}")]
     return []
 
 
 def allowed(root: Path, session: str, change: Change, payload: dict[str, object]) -> bool:
-    """Holds a change until the agent has told the user about it, then lets its retry through.
+    """Holds a change until the agent has written the user its block, then lets its retry through.
 
     Outside git there is no trail to remember a hold in, so nothing is held.
     """
     if trail(root) is None:
         return True
-    earlier = [
-        entry
-        for entry in entries(root)
-        if entry.get("hook") == "change-gate"
-        and entry.get("session") == session
-        and entry.get("trigger") == change.trigger
-        and entry.get("key") == change.key
-    ]
-    last = earlier[-1] if earlier else {}
     entry = {
         "hook": "change-gate",
         "session": session,
         "trigger": change.trigger,
-        "key": change.key,
+        "target": change.target,
     }
+    earlier = [past for past in entries(root) if all(past.get(key) == entry[key] for key in entry)]
+    last = earlier[-1] if earlier else {}
     decision = last.get("decision", "")
     if decision == "released" and change.lasts_the_session:
         return True
-    transcript = transcript_lines(payload)
-    mark = "" if transcript is None else str(len(transcript))
-    if decision == "held" and transcript is None:
-        unverified = "unverified: the client names no transcript to check"
-        record(
-            root, {**entry, "decision": "released", "target": change.target, "detail": unverified}
-        )
-        return True
-    if decision == "held" and transcript is not None:
-        words = words_since(transcript, int(last.get("mark") or 0))
-        if words:
-            record(root, {**entry, "decision": "released", "target": change.target, "said": words})
-            return True
-        silent = "retried without telling the user"
-        record(
-            root,
-            {**entry, "decision": "held", "target": change.target, "mark": mark, "detail": silent},
-        )
-        err(f"py-harness change gate: {change.doing} was retried without a word to the user.")
-        err("Write the explanation as a message to the user first, then make the change again.")
+    events = transcript(payload)
+    mark = "" if events is None else str(len(events))
+    if decision != "held":
+        record(root, {**entry, "decision": "held", "mark": mark})
+        show(change, "is held until the user is told about it")
         return False
-    record(root, {**entry, "decision": "held", "target": change.target, "mark": mark})
-    err(f"py-harness change gate: before {change.doing}, tell the user in two or three lines")
-    err(f"{QUESTIONS[change.trigger]}. Then make the same change again.")
+    if events is None:
+        record(root, {**entry, "decision": "released", "detail": UNVERIFIED})
+        return True
+    block = answer(change, said_since(events, int(last.get("mark") or 0)))
+    missing = shortfall(change, block, typed(events))
+    if not missing:
+        answered = {key: block[key] for key in change.fields}
+        record(root, {**entry, "decision": "released", **answered})
+        return True
+    record(root, {**entry, "decision": "held", "mark": mark, "detail": missing})
+    show(change, f"is still held: {missing}")
     return False
 
 
-def transcript_lines(payload: dict[str, object]) -> list[str] | None:
+def show(change: Change, state: str) -> None:
+    """The block the agent must write the user, with its CHANGE line already filled in."""
+    err(f"py-harness change gate: {change.doing} {state}.")
+    err("Write the user a message with these lines, then make the same change again:")
+    err(f"CHANGE: {change.target}")
+    hints = {**HINTS, "why": QUESTIONS[change.trigger]}
+    for field in change.fields:
+        err(f"{field.upper()}: <{hints[field]}>")
+    if change.needs_the_users_words:
+        err(NEVER_ASKED)
+
+
+def answer(change: Change, said: list[str]) -> Entry:
+    """The last block the agent wrote for this change, or nothing."""
+    written = [block for block in blocks(said) if block.get("change") == change.target]
+    return written[-1] if written else {}
+
+
+def blocks(said: list[str]) -> list[Entry]:
+    """Each CHANGE line in the agent's messages, with the field lines right under it."""
+    found: list[Entry] = []
+    for message in said:
+        current: Entry | None = None
+        for line in message.splitlines():
+            field = FIELD.match(line.strip())
+            if field is not None and field["name"] == "CHANGE":
+                current = {}
+                found.append(current)
+            if field is None or current is None:
+                current = None
+            else:
+                current[field["name"].lower()] = " ".join(field["value"].split()).strip(MARKS)
+    return found
+
+
+def shortfall(change: Change, block: Entry, words: list[str]) -> str:
+    """Why the block does not yet answer for the change; empty once it does."""
+    if not block:
+        return f"no message to the user since the hold has the line CHANGE: {change.target}"
+    empty = [field.upper() for field in change.fields if not block.get(field)]
+    if empty:
+        return f"the block leaves {' and '.join(empty)} empty"
+    quote = block.get("asked", "")
+    if change.needs_the_users_words and len(quote.split()) < QUOTE_WORDS:
+        return f"ASKED quotes fewer than {QUOTE_WORDS} words"
+    if change.needs_the_users_words and not any(quote in message for message in words):
+        return "the ASKED words are in no message from the user"
+    return ""
+
+
+def transcript(payload: dict[str, object]) -> list[Event] | None:
     """The session so far, when the client names its transcript."""
     path = Path(text(payload, "transcript_path"))
     if not path.name or not path.is_file():
         return None
-    return [line for line in path.read_text(encoding="utf-8").splitlines() if line]
+    lines = path.read_text(encoding="utf-8").splitlines()
+    # The client writes each event of the session as one JSON object per line.
+    return [cast("Event", json.loads(line)) for line in lines if line]
 
 
-def words_since(transcript: list[str], mark: int) -> str:
-    """What the agent wrote for the user after the mark; its hidden reasoning does not count."""
-    last = ""
-    for line in transcript[mark:]:
-        # A transcript line is one JSON object; an assistant's holds its message's content blocks.
-        event = cast("dict[str, object]", json.loads(line))
-        message = event.get("message")
-        if event.get("type") != "assistant" or not isinstance(message, dict):
-            continue
-        blocks = cast("dict[str, object]", message).get("content")
-        if isinstance(blocks, list):
-            for block in cast("list[dict[str, object]]", blocks):
-                if block.get("type") == "text":
-                    last = text(block, "text")
-    return " ".join(last.split())[:SAID_LIMIT]
+def said_since(events: list[Event], mark: int) -> list[str]:
+    """What the agent wrote for the user after the mark; its hidden reasoning is another block."""
+    return [
+        message
+        for event in events[mark:]
+        if event.get("type") == "assistant"
+        for message in texts(event)
+    ]
+
+
+def typed(events: list[Event]) -> list[str]:
+    """What the user wrote; text the client adds on its own, such as a loaded skill, is meta."""
+    return [
+        " ".join(message.split())
+        for event in events
+        if event.get("type") == "user" and event.get("isMeta") is not True
+        for message in texts(event)
+    ]
+
+
+def texts(event: Event) -> list[str]:
+    """The text in an event's message; tool calls and their results are other blocks."""
+    message = event.get("message")
+    if not isinstance(message, dict):
+        return []
+    content = cast("dict[str, object]", message).get("content")
+    if isinstance(content, str):
+        return [content]
+    if not isinstance(content, list):
+        return []
+    parts = cast("list[dict[str, object]]", content)
+    return [text(part, "text") for part in parts if part.get("type") == "text"]
 
 
 def text(table: dict[str, object], key: str) -> str:

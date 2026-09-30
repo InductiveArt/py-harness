@@ -80,8 +80,20 @@ finding instead of the task at hand, so it waits until then.
 A second hook, the change gate, is opt-in the same way. Before the agent
 creates a file, runs a destructive command (`rm`, `git reset --hard`, a
 force-push, ...) or edits the harness wiring (`pyproject.toml`, the
-Makefile), it holds the change once and asks the agent to tell you, in two or
-three lines, why and how to undo it; the retry goes through. In
+Makefile), it holds the change and prints a block for the agent to write you:
+
+```text
+CHANGE: rm src/app/legacy.py
+WHY: what it deletes or discards, and why
+UNDO: the command that reverses it
+ASKED: your own words asking for it, copied exactly
+```
+
+The retry goes through only once a message to you, written after the hold,
+carries that `CHANGE` line with every field filled in. A new file needs no
+`ASKED`: where code lives is the agent's call. A deletion or a wiring edit
+does, and the gate checks the quote against what you typed, three words at
+least, so a change you never asked for stays held until you do. In
 `.claude/settings.local.json`:
 
 ```json
@@ -108,7 +120,7 @@ For VS Code, link `.venv/share/py-harness/hooks/vscode-changes.json` into
 
 Both gates record every decision in the clone's audit trail,
 `.git/py-harness/audit.jsonl`, never committed; when the change gate lets a
-held change through, the trail keeps what the agent said just before it.
+held change through, the trail keeps the block that released it.
 `make audit` prints the trail.
 
 Run `uv sync` once first: make cannot read the include before `.venv` exists.
@@ -178,6 +190,10 @@ What no check catches, so a passing run does not claim it:
   finds the other ways a name is hidden.
 - A `conftest.py` hook that deselects tests. Settings that do so are refused;
   code that does is not.
+- Whether a change gate block is true. The gate checks that the block reached
+  you and that its quote is yours, not that the quote fits the change.
+- Holds in a client that names no transcript. The retry goes through, marked
+  unverified in the trail.
 
 ## Invariants
 

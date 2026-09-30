@@ -9,6 +9,8 @@ from py_harness.audit import entries
 from tests.support import Project
 
 HELD = 2
+PROMPT = "Tidy up: src/demo/old.py is no longer wanted, delete it,\nthen add the parser."
+QUOTE = "\u201cdelete it, then add the parser\u201d"
 
 
 def hook(root: Path, payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
@@ -27,12 +29,36 @@ def decisions(project: Project) -> list[str]:
     return [entry["decision"] for entry in entries(project.root)]
 
 
-def test_a_new_file_is_held_once_then_released(project: Project) -> None:
-    first = hook(project.root, call("Write", file_path="src/demo/new.py"))
-    assert first.returncode == HELD
-    assert "before creating src/demo/new.py, tell the user" in first.stderr
-    assert hook(project.root, call("Write", file_path="src/demo/new.py")).returncode == 0
-    assert decisions(project) == ["held", "released"]
+def append(transcript: Path, *events: dict[str, object]) -> None:
+    with transcript.open("a") as file:
+        file.writelines(json.dumps(event) + "\n" for event in events)
+
+
+def said(words: str) -> dict[str, object]:
+    return {"type": "assistant", "message": {"content": [{"type": "text", "text": words}]}}
+
+
+def typed(words: str) -> dict[str, object]:
+    return {"type": "user", "message": {"content": words}}
+
+
+def block(target: str, asked: str = "") -> str:
+    lines = [f"CHANGE: {target}", "WHY: the parser reads it", "UNDO: git rm it"]
+    return "\n".join([*lines, f"ASKED: {asked}"] if asked else lines)
+
+
+@pytest.fixture
+def transcript(tmp_path: Path) -> Path:
+    path = tmp_path / "session.jsonl"
+    append(path, typed(PROMPT))
+    return path
+
+
+def traced(transcript: Path, payload: dict[str, object]) -> dict[str, object]:
+    return {**payload, "transcript_path": str(transcript)}
+
+
+# #region Which changes are held
 
 
 def test_an_edit_to_an_existing_file_passes_unrecorded(project: Project) -> None:
@@ -40,15 +66,10 @@ def test_an_edit_to_an_existing_file_passes_unrecorded(project: Project) -> None
     assert decisions(project) == []
 
 
-def test_a_destructive_retry_need_not_match_and_a_later_one_asks_again(project: Project) -> None:
-    assert hook(project.root, call("Bash", command="rm -f src/demo/x.py")).returncode == HELD
-    assert hook(project.root, call("Bash", command="rm  -f  src/demo/x.py")).returncode == 0
-    assert hook(project.root, call("Bash", command="rm -f src/demo/y.py")).returncode == HELD
-
-
 @pytest.mark.parametrize(
     "command",
     [
+        "rm -f src/demo/x.py",
         "git reset --hard HEAD",
         "git clean -fd",
         "git push --force",
@@ -71,13 +92,6 @@ def test_a_harmless_command_passes(project: Project, command: str) -> None:
     assert hook(project.root, call("Bash", command=command)).returncode == 0
 
 
-def test_the_wiring_is_held_once_per_session(project: Project) -> None:
-    assert hook(project.root, call("Edit", file_path="pyproject.toml")).returncode == HELD
-    assert hook(project.root, call("Edit", file_path="pyproject.toml")).returncode == 0
-    assert hook(project.root, call("Edit", file_path="pyproject.toml")).returncode == 0
-    assert hook(project.root, call("Edit", session="s2", file_path="Makefile")).returncode == HELD
-
-
 def test_an_editor_patch_is_judged_file_by_file(project: Project) -> None:
     patch = (
         "*** Begin Patch\n*** Add File: src/demo/added.py\n+x = 1\n"
@@ -96,63 +110,6 @@ def test_the_editor_agents_tool_names_are_recognised(project: Project) -> None:
     )
 
 
-def append(transcript: Path, *events: dict[str, object]) -> None:
-    with transcript.open("a") as file:
-        file.writelines(json.dumps(event) + "\n" for event in events)
-
-
-def spoken(words: str) -> dict[str, object]:
-    return {"type": "assistant", "message": {"content": [{"type": "text", "text": words}]}}
-
-
-def test_the_release_keeps_what_the_agent_told_the_user_after_the_hold(
-    project: Project, tmp_path: Path
-) -> None:
-    transcript = tmp_path / "session.jsonl"
-    append(transcript, spoken("Earlier words, before the change was held."))
-    payload = {**call("Write", file_path="src/demo/new.py"), "transcript_path": str(transcript)}
-    assert hook(project.root, payload).returncode == HELD
-    append(
-        transcript,
-        {"type": "user", "message": {"content": "held"}},
-        {"type": "assistant", "message": "not an object"},
-        {
-            "type": "assistant",
-            "message": {
-                "content": [
-                    {"type": "text", "text": "Creating new.py:  the parser needs it."},
-                    {"type": "tool_use", "name": "Write"},
-                ]
-            },
-        },
-        {"type": "assistant", "message": {"content": "plain"}},
-    )
-    assert hook(project.root, payload).returncode == 0
-    assert entries(project.root)[-1]["said"] == "Creating new.py: the parser needs it."
-
-
-def test_a_silent_retry_is_held_again(project: Project, tmp_path: Path) -> None:
-    transcript = tmp_path / "session.jsonl"
-    append(transcript, spoken("Starting."))
-    payload = {**call("Edit", file_path="pyproject.toml"), "transcript_path": str(transcript)}
-    hook(project.root, payload)
-    thinking = {"type": "thinking", "thinking": "I will just retry."}
-    append(transcript, {"type": "assistant", "message": {"content": [thinking]}})
-    silent = hook(project.root, payload)
-    assert silent.returncode == HELD
-    assert "was retried without a word to the user" in silent.stderr
-    assert entries(project.root)[-1]["detail"] == "retried without telling the user"
-    append(transcript, spoken("Declaring trial as first-party, as you asked."))
-    assert hook(project.root, payload).returncode == 0
-    assert decisions(project) == ["held", "held", "released"]
-
-
-def test_without_a_transcript_the_release_is_marked_unverified(project: Project) -> None:
-    hook(project.root, call("Write", file_path="src/demo/new.py"))
-    hook(project.root, call("Write", file_path="src/demo/new.py"))
-    assert entries(project.root)[-1]["detail"].startswith("unverified")
-
-
 def test_outside_git_nothing_is_held(tmp_path: Path) -> None:
     assert hook(tmp_path, call("Write", file_path="new.py")).returncode == 0
 
@@ -165,16 +122,157 @@ def test_an_empty_event_passes(project: Project) -> None:
     assert completed.returncode == 0
 
 
-def test_audit_prints_each_decision_and_what_was_said(project: Project, tmp_path: Path) -> None:
-    transcript = tmp_path / "session.jsonl"
-    append(transcript, spoken("Starting."))
-    payload = {**call("Write", file_path="src/demo/new.py"), "transcript_path": str(transcript)}
+# #region What a hold asks for
+
+
+def test_a_hold_prints_the_block_to_write_with_its_change_line_filled_in(
+    project: Project,
+) -> None:
+    stderr = hook(project.root, call("Write", file_path="src/demo/new.py")).stderr
+    assert "creating src/demo/new.py is held until the user is told about it." in stderr
+    assert "CHANGE: src/demo/new.py\nWHY: <what will use it" in stderr
+    assert "UNDO: <the command that reverses it>" in stderr
+    assert "ASKED" not in stderr
+
+
+def test_deleting_or_rewiring_also_asks_for_the_users_own_words(project: Project) -> None:
+    stderr = hook(project.root, call("Bash", command="rm src/demo/x.py")).stderr
+    assert "CHANGE: rm src/demo/x.py\n" in stderr
+    assert "ASKED: <the user's own words asking for it, copied exactly>" in stderr
+    assert "If the user never asked for this, do not make it" in stderr
+
+
+# #region What releases a hold
+
+
+def test_the_block_written_after_the_hold_releases_the_change(
+    project: Project, transcript: Path
+) -> None:
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
+    assert hook(project.root, payload).returncode == HELD
+    append(transcript, said(f"Adding the parser module.\n\n{block('src/demo/new.py')}"))
+    assert hook(project.root, payload).returncode == 0
+    released = entries(project.root)[-1]
+    assert (released["why"], released["undo"]) == ("the parser reads it", "git rm it")
+
+
+def test_a_retry_without_the_block_is_held_again(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
     hook(project.root, payload)
-    append(transcript, spoken("Needed."))
+    reasoning = {"type": "thinking", "thinking": block("src/demo/new.py")}
+    append(
+        transcript,
+        {"type": "assistant", "message": {"content": [reasoning]}},
+        {"type": "assistant", "message": "not an object"},
+        {"type": "assistant", "message": {}},
+        said("The gate didn't pick up that note."),
+    )
+    retried = hook(project.root, payload)
+    assert retried.returncode == HELD
+    assert "creating src/demo/new.py is still held: no message to the user" in retried.stderr
+    append(transcript, {"type": "assistant", "message": {"content": block("src/demo/new.py")}})
+    assert hook(project.root, payload).returncode == 0
+    assert decisions(project) == ["held", "held", "released"]
+
+
+def test_a_block_written_before_the_hold_does_not_count(project: Project, transcript: Path) -> None:
+    append(transcript, said(block("src/demo/new.py")))
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, payload)
+    assert hook(project.root, payload).returncode == HELD
+
+
+def test_a_block_for_another_change_does_not_count(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("src/demo/other.py")))
+    assert hook(project.root, payload).returncode == HELD
+
+
+def test_the_field_lines_must_sit_right_under_the_change_line(
+    project: Project, transcript: Path
+) -> None:
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, payload)
+    append(transcript, said("WHY: early\nCHANGE: src/demo/new.py\n\nWHY: late\nUNDO: late"))
+    assert hook(project.root, payload).returncode == HELD
+    assert entries(project.root)[-1]["detail"] == "the block leaves WHY and UNDO empty"
+
+
+def test_a_value_may_be_wrapped_in_backticks(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("`src/demo/new.py`")))
+    assert hook(project.root, payload).returncode == 0
+
+
+def test_a_quote_of_the_users_words_releases_a_deletion(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Bash", command="rm src/demo/old.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("rm src/demo/old.py", asked=QUOTE)))
+    assert hook(project.root, payload).returncode == 0
+    assert entries(project.root)[-1]["asked"] == "delete it, then add the parser"
+
+
+def test_a_quote_the_user_never_wrote_is_held(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Bash", command="rm src/demo/old.py"))
+    hook(project.root, payload)
+    skill = {**typed("remove the scratch file"), "isMeta": True}
+    result = {"type": "tool_result", "content": "remove the scratch file"}
+    append(transcript, skill, {"type": "user", "message": {"content": [result]}})
+    append(transcript, said(block("rm src/demo/old.py", asked="remove the scratch file")))
+    assert hook(project.root, payload).returncode == HELD
+    assert entries(project.root)[-1]["detail"] == "the ASKED words are in no message from the user"
+
+
+def test_a_quote_under_three_words_is_held(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Bash", command="rm src/demo/old.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("rm src/demo/old.py", asked="delete it")))
+    assert hook(project.root, payload).returncode == HELD
+    assert entries(project.root)[-1]["detail"] == "ASKED quotes fewer than 3 words"
+
+
+def test_the_wiring_is_answered_once_per_session(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Edit", file_path="pyproject.toml"))
+    hook(project.root, payload)
+    append(transcript, said(block("pyproject.toml", asked=QUOTE)))
+    assert hook(project.root, payload).returncode == 0
+    assert hook(project.root, payload).returncode == 0
+    assert hook(project.root, call("Edit", session="s2", file_path="Makefile")).returncode == HELD
+
+
+def test_each_destructive_command_answers_anew(project: Project, transcript: Path) -> None:
+    payload = traced(transcript, call("Bash", command="rm src/demo/old.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("rm src/demo/old.py", asked=QUOTE)))
+    assert hook(project.root, payload).returncode == 0
+    again = hook(project.root, payload)
+    assert again.returncode == HELD
+    assert "is held until the user is told about it" in again.stderr
+
+
+def test_without_a_transcript_the_release_is_marked_unverified(project: Project) -> None:
+    hook(project.root, call("Write", file_path="src/demo/new.py"))
+    hook(project.root, call("Write", file_path="src/demo/new.py"))
+    assert entries(project.root)[-1]["detail"].startswith("unverified")
+
+
+# #region Audit
+
+
+def test_audit_prints_each_decision_and_the_block_that_released_it(
+    project: Project, transcript: Path
+) -> None:
+    payload = traced(transcript, call("Bash", command="rm src/demo/old.py"))
+    hook(project.root, payload)
+    append(transcript, said(block("rm src/demo/old.py", asked=QUOTE)))
     hook(project.root, payload)
     shown = project.make("audit").stdout
-    assert "change-gate  held  new file  src/demo/new.py" in shown
-    assert "change-gate  released  new file  src/demo/new.py\n    said: Needed." in shown
+    assert "change-gate  held  destructive  rm src/demo/old.py" in shown
+    released = "change-gate  released  destructive  rm src/demo/old.py\n"
+    fields = "    why: the parser reads it\n    undo: git rm it\n"
+    assert released + fields + "    asked: delete it, then add the parser" in shown
 
 
 def test_audit_says_when_nothing_is_recorded(project: Project) -> None:

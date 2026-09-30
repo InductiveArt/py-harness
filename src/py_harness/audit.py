@@ -13,6 +13,8 @@ Entry: TypeAlias = dict[str, str]
 TRAIL = "py-harness/audit.jsonl"
 SHOWN = 30
 COLUMNS = ("time", "hook", "decision", "trigger", "target")
+# What a release carries from the agent's block, then why a hold held.
+DETAILS = ("why", "undo", "asked", "detail")
 
 
 def trail(root: Path) -> Path | None:
@@ -47,7 +49,7 @@ def main() -> int:
         return 0
     for entry in shown:
         out("  ".join(entry.get(column, "") for column in COLUMNS).rstrip())
-        for detail in ("said", "detail"):
+        for detail in DETAILS:
             if entry.get(detail):
                 out(f"    {detail}: {entry[detail]}")
     return 0
