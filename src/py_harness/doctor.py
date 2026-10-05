@@ -1,16 +1,24 @@
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from py_harness.console import err
 from py_harness.console import out
+from py_harness.findings import counted
 from py_harness.layout import source_packages
 from py_harness.layout import source_root
 from py_harness.units import UNITS_VARIABLE
 from py_harness.units import UnitsError
 from py_harness.units import encode_units
 from py_harness.units import resolve_units
+from py_harness.verdict import BROKEN
+from py_harness.verdict import FAILED
+from py_harness.verdict import PASSED
+from py_harness.verdict import Section
+from py_harness.verdict import Verdict
+from py_harness.verdict import report
 
 # The prefix is the kind: a rule fails on a violation, a drift fails on config
 # that has diverged, a report only informs. Kinds run in this order.
@@ -18,6 +26,16 @@ KINDS = ("rule-", "drift-", "report-")
 SHARED_CHECKS = Path(__file__).parent / "rules"
 LOCAL_CHECKS = Path(".py-harness") / "doctor"
 HARNESS_VARIABLE = "PY_HARNESS_DIR"
+# A check exits with this code when it found something; any other failing code is a crash.
+FOUND = 1
+
+
+@dataclass(frozen=True)
+class Checked:
+    name: str
+    code: int
+    lines: list[str]
+    error: str
 
 
 def main(argv: list[str]) -> int:
@@ -28,10 +46,12 @@ def main(argv: list[str]) -> int:
         units = resolve_units(root)
     except UnitsError as error:
         err(f"units: {error}")
+        report(Verdict(FAILED, f"units: {error}"))
         return 1
     checks = [check for check in discover(root) if matches(check, wanted)]
     if not checks:
         out(f"doctor: no check matched '{wanted}'")
+        report(Verdict(FAILED, f"no check matched '{wanted}'"))
         return 1
     for unit in units:
         if not source_packages(unit):
@@ -40,18 +60,49 @@ def main(argv: list[str]) -> int:
     # Resolved once and handed down, so each exclusion is announced once
     # rather than once per check.
     environment = {**os.environ, UNITS_VARIABLE: encode_units(units), HARNESS_VARIABLE: harness}
-    failed = False
+    finished: list[Checked] = []
     previous: list[str] = []
     for check in checks:
-        command = [sys.executable, str(check)]
+        command = [sys.executable, "-m", "py_harness.guard", str(check)]
         completed = subprocess.run(
-            command, env=environment, check=False, stdout=subprocess.PIPE, text=True
+            command, env=environment, check=False, capture_output=True, text=True
         )
         lines = completed.stdout.rstrip("\n").splitlines()
         show(lines, previous)
+        sys.stderr.write(completed.stderr)
         previous = lines or previous
-        failed = failed or completed.returncode != 0
-    return 1 if failed else 0
+        finished.append(Checked(check.stem, completed.returncode, lines, completed.stderr))
+    verdict = judged(finished)
+    report(verdict)
+    return 0 if verdict.outcome == PASSED else 1
+
+
+def judged(finished: list[Checked]) -> Verdict:
+    """Fails on a check that found something; a check that crashed leaves the verdict unknown."""
+    crashed = [check for check in finished if check.code not in (0, FOUND)]
+    failed = [check for check in finished if check.code == FOUND]
+    if not crashed and not failed:
+        return Verdict(PASSED, f"{counted(len(finished), 'check')} passed")
+    groups = ((crashed, "crashed"), (failed, "failed"))
+    parts = [
+        f"{', '.join(check.name for check in group)} {what}" for group, what in groups if group
+    ]
+    named = [*crashed, *failed]
+    first = [f"{check.name}: {gist(check)}" for check in named]
+    sections = [Section(check.name, [*check.lines, *check.error.splitlines()]) for check in named]
+    return Verdict(BROKEN if crashed else FAILED, "; ".join(parts), first=first, sections=sections)
+
+
+def gist(check: Checked) -> str:
+    """What says most in one line: a crash's last error, or a finding's heading and first item."""
+    errors = [line for line in check.error.splitlines() if line.strip()]
+    lines = [line.strip() for line in check.lines if line.strip()]
+    if check.code != FOUND and errors:
+        return errors[-1]
+    if not lines:
+        return "(no output)"
+    # A check heads its findings with a line ending in a colon, then lists one per line.
+    return " ".join(lines[:2]) if lines[0].endswith(":") and len(lines) > 1 else lines[0]
 
 
 def show(lines: list[str], previous: list[str]) -> None:

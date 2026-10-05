@@ -1,5 +1,13 @@
+import sys
 from pathlib import Path
 
+import pytest
+
+from py_harness import guard
+from py_harness.doctor import Checked
+from py_harness.doctor import judged
+from py_harness.guard import CRASHED
+from py_harness.verdict import BROKEN
 from tests.support import SHARE
 from tests.support import Project
 
@@ -108,3 +116,67 @@ def test_doctor_fails_when_units_cannot_resolve(tmp_path: Path) -> None:
     result = created.make("doctor")
     assert result.returncode != 0
     assert "units: pyproject.toml declares no [project]" in result.stderr
+
+
+# #region Verdict
+
+
+def test_a_crashed_check_breaks_the_doctor_and_names_its_error() -> None:
+    finished = [
+        Checked("rule-a", 0, [], ""),
+        Checked("rule-b", CRASHED, [], "Traceback (most recent call last):\nValueError: x\n"),
+        Checked("rule-c", 1, ["Header (forbidden):", "  a.py:1  why"], ""),
+    ]
+    verdict = judged(finished)
+    assert verdict.outcome == BROKEN
+    assert verdict.headline == "rule-b crashed; rule-c failed"
+    assert verdict.first == ["rule-b: ValueError: x", "rule-c: Header (forbidden): a.py:1  why"]
+
+
+def test_a_finding_without_a_heading_is_given_whole() -> None:
+    assert judged([Checked("rule-a", 1, ["one line"], "")]).first == ["rule-a: one line"]
+
+
+def test_a_check_that_fails_silently_says_so() -> None:
+    assert judged([Checked("rule-a", 1, [], "")]).first == ["rule-a: (no output)"]
+
+
+def test_a_crash_that_printed_no_error_shows_what_it_printed() -> None:
+    assert judged([Checked("rule-a", CRASHED, ["partial"], "")]).first == ["rule-a: partial"]
+
+
+# #region Guard
+
+
+@pytest.fixture
+def isolated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guard sets the argument list and import path as a script run would; this keeps them."""
+    monkeypatch.setattr(sys, "argv", list(sys.argv))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+
+@pytest.mark.usefixtures("isolated")
+def test_the_guard_tells_a_crash_from_a_finding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    check = tmp_path / "rule-boom.py"
+    check.write_text('raise RuntimeError("boom")\n')
+    assert guard.main(["guard", str(check)]) == CRASHED
+    assert "RuntimeError: boom" in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("isolated")
+def test_the_guard_passes_a_checks_own_exit_through(tmp_path: Path) -> None:
+    check = tmp_path / "rule-found.py"
+    check.write_text("import sys\n\nsys.exit(1)\n")
+    with pytest.raises(SystemExit) as exited:
+        guard.main(["guard", str(check)])
+    assert exited.value.code == 1
+
+
+@pytest.mark.usefixtures("isolated")
+def test_a_guarded_check_imports_its_neighbours(tmp_path: Path) -> None:
+    (tmp_path / "helper_for_guard.py").write_text("VALUE = 1\n")
+    check = tmp_path / "rule-neighbour.py"
+    check.write_text("import helper_for_guard\n\nassert helper_for_guard.VALUE == 1\n")
+    assert guard.main(["guard", str(check)]) == 0

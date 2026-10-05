@@ -1,12 +1,23 @@
+import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from py_harness import stage
+from py_harness.pytest_plugin import REPORT_VARIABLE
+from py_harness.pytest_plugin import cause
+from py_harness.verdict import BROKEN
+from py_harness.verdict import PASSED
+from py_harness.verdict import VERDICT_VARIABLE
+from py_harness.verdict import Verdict
+from py_harness.verdict import read_verdict
 from tests.support import PASSING
 from tests.support import SHARE
+from tests.support import VENV
 from tests.support import Project
 from tests.support import declare_layout
+from tests.support import harness_environment
 from tests.support import manifest
 
 FAILING = "def test_fails() -> None:\n    assert False\n"
@@ -115,10 +126,9 @@ def test_a_stage_reports_units_it_cannot_resolve(tmp_path: Path) -> None:
 
 
 def test_an_unknown_stage_is_refused(capsys: pytest.CaptureFixture[str]) -> None:
-    assert stage.main(["stage", str(SHARE), "lint"]) == 2
-    assert "unknown stage: lint (expected test, test-integration, coverage, typecheck)" in (
-        capsys.readouterr().err
-    )
+    assert stage.main(["stage", str(SHARE), "nightly"]) == 2
+    expected = "unknown stage: nightly (expected format-fix, lint-fix, lint-fix-unsafe, format,"
+    assert expected in capsys.readouterr().err
 
 
 # #region Integration
@@ -300,3 +310,112 @@ def test_coverage_measures_the_declared_source(project: Project) -> None:
     result = project.make("coverage")
     assert result.returncode == 0
     assert "Required test coverage of 100.0% reached" in result.stdout
+
+
+# #region Verdicts
+
+
+def ran(reports: Path, code: int, stdout: str = "") -> stage.Ran:
+    return stage.Ran(code, stdout, reports)
+
+
+def recorded(reports: Path, passed: int, *failures: str) -> None:
+    problems = [{"test": test, "message": "boom", "text": "trace"} for test in failures]
+    content = {"rootdir": str(reports), "passed": passed, "problems": problems}
+    (reports / stage.TEST_REPORT).write_text(json.dumps(content))
+
+
+def test_every_unit_passing_is_one_pass(tmp_path: Path) -> None:
+    created = wired_workspace(tmp_path / "repo", "libs/a", "libs/b")
+    created.write("libs/a/tests/test_a.py", PASSING)
+    created.write("libs/b/tests/test_b.py", PASSING)
+    target = tmp_path / "test.verdict"
+    assert created.make("test", environment={VERDICT_VARIABLE: str(target)}).returncode == 0
+    assert read_verdict(target) == Verdict(PASSED, "2 units passed")
+
+
+def test_the_unit_a_stage_stopped_at_says_how_many_never_ran(tmp_path: Path) -> None:
+    created = wired_workspace(tmp_path / "repo", "libs/a", "libs/b")
+    created.write("libs/a/tests/test_a.py", FAILING)
+    target = tmp_path / "test.verdict"
+    created.make("test", environment={VERDICT_VARIABLE: str(target)})
+    verdict = read_verdict(target)
+    assert verdict is not None
+    assert verdict.headline == "1 failed, 0 passed; 1 unit after it not run"
+
+
+def absent_checker(_unit: Path | None, _harness: Path, _reports: Path) -> stage.Step:
+    return stage.Run(["no-such-checker-anywhere"])
+
+
+def test_a_checker_that_cannot_start_is_broken(tmp_path: Path) -> None:
+    absent = stage.Stage(absent_checker, stage.judge_fix)
+    verdict = stage.perform("lint", None, absent, tmp_path, tmp_path, {})
+    assert verdict.outcome == BROKEN
+    assert verdict.headline.startswith("could not start no-such-checker-anywhere: ")
+
+
+def test_a_checker_exit_beyond_found_is_broken_and_its_output_kept(tmp_path: Path) -> None:
+    judged = stage.judge_typecheck(ran(tmp_path, 2, "Fatal error"), tmp_path)
+    assert judged.verdict == Verdict(BROKEN, "basedpyright exited 2")
+    assert judged.shown == ["Fatal error"]
+
+
+def test_a_found_exit_with_an_empty_report_is_broken(tmp_path: Path) -> None:
+    judged = stage.judge_typecheck(ran(tmp_path, 1, '{"generalDiagnostics": []}'), tmp_path)
+    assert judged.verdict == Verdict(
+        BROKEN, "basedpyright exited 1 and its report could not be read"
+    )
+
+
+def test_a_test_session_that_failed_and_recorded_nothing_is_broken(tmp_path: Path) -> None:
+    assert stage.judge_tests(ran(tmp_path, 3), tmp_path).verdict == Verdict(
+        BROKEN, "pytest exited 3"
+    )
+
+
+def test_a_clean_test_session_passes_even_without_its_report(tmp_path: Path) -> None:
+    assert stage.judge_tests(ran(tmp_path, 0), tmp_path).verdict == Verdict(PASSED)
+
+
+def test_coverage_names_a_failing_test_before_any_gap(tmp_path: Path) -> None:
+    recorded(tmp_path, 2, "tests/test_a.py::test_x")
+    verdict = stage.judge_coverage(ran(tmp_path, 1), tmp_path).verdict
+    assert verdict.headline == "1 failed, 2 passed"
+
+
+def test_coverage_without_its_report_is_broken(tmp_path: Path) -> None:
+    recorded(tmp_path, 2)
+    assert stage.judge_coverage(ran(tmp_path, 1), tmp_path).verdict.outcome == BROKEN
+
+
+def test_coverage_short_of_full_never_reads_as_full(tmp_path: Path) -> None:
+    recorded(tmp_path, 2)
+    gaps = {"src/a.py": {"missing_lines": [7], "missing_branches": []}}
+    measured = {"totals": {"percent_covered": 99.96}, "files": gaps}
+    (tmp_path / stage.COVERAGE_REPORT).write_text(json.dumps(measured))
+    verdict = stage.judge_coverage(ran(tmp_path, 1), tmp_path).verdict
+    assert verdict.headline == "99.9% covered; 1 file with code no test runs"
+    assert verdict.first == ["src/a.py: lines 7"]
+
+
+def test_a_failure_without_a_marked_line_gives_its_last_line() -> None:
+    assert cause("first\nlast\n", "call") == "last"
+    assert cause("", "setup") == "in setup: "
+
+
+def test_an_unproven_xfail_is_refused_outside_a_stage_too(project: Project) -> None:
+    marker = "import pytest\n\n\n@pytest.mark.xfail(strict=False)\n"
+    project.write("tests/test_unit.py", marker + PASSING)
+    environment = {**harness_environment(), "PYTHONPATH": "src"}
+    environment.pop(REPORT_VARIABLE, None)
+    result = subprocess.run(
+        [str(VENV / "bin" / "pytest"), "-p", "no:cacheprovider", "tests"],
+        cwd=project.root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == pytest.ExitCode.USAGE_ERROR
+    assert "an xfail must prove its test still fails" in result.stderr

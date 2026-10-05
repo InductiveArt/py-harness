@@ -14,7 +14,7 @@ announce = @printf '\n→ %s\n' '$@'
 .PHONY: help units wiring install agent audit clean update \
         format format-fix lint lint-fix lint-fix-unsafe \
         typecheck typecheck-pkg test test-pkg test-integration coverage \
-        check ready ci doctor
+        check ready ci last doctor
 
 # #region Orientation
 
@@ -52,6 +52,7 @@ help:
 	@echo "  check         did I break what I just touched - fixes, lint, types, doctor, tests"
 	@echo "  ready         is this ready to commit - install, fixes, lint, types, doctor, coverage"
 	@echo "  ci            does the code as committed pass - the same, never fixing a file"
+	@echo "  last          the newest check, ready or ci run again, from its logs, running nothing"
 	@echo "  doctor        structural health (RULE=<name> runs one rule)"
 
 # `units` is a target rather than an internal detail because the first
@@ -91,28 +92,22 @@ update:
 # A fix target applies what it can and passes; what remains is lint's to report,
 # so a failure always names the stage that owns it.
 
-format: wiring
-	$(announce)
-	$(RUN) ruff format --check .
-format-fix: wiring
-	$(announce)
-	$(RUN) ruff format .
-lint: wiring
-	$(announce)
-	$(RUN) ruff check .
-lint-fix: wiring
-	$(announce)
-	$(RUN) ruff check --fix-only .
-lint-fix-unsafe: wiring
-	$(announce)
-	$(RUN) ruff check --fix-only --unsafe-fixes .
+format:
+	@$(PY).stage $(HARNESS) format
+format-fix:
+	@$(PY).stage $(HARNESS) format-fix
+lint:
+	@$(PY).stage $(HARNESS) lint
+lint-fix:
+	@$(PY).stage $(HARNESS) lint-fix
+lint-fix-unsafe:
+	@$(PY).stage $(HARNESS) lint-fix-unsafe
 
 # #region Types
 
-typecheck: wiring
-	$(announce)
-	$(RUN) basedpyright
-typecheck-pkg: wiring
+typecheck:
+	@$(PY).stage $(HARNESS) typecheck
+typecheck-pkg:
 	@$(PY).stage $(HARNESS) typecheck $(call required_pkg)
 
 # #region Tests
@@ -123,7 +118,7 @@ test-pkg:
 	@$(PY).stage $(HARNESS) test $(call required_pkg)
 test-integration:
 	@$(PY).stage $(HARNESS) test-integration
-coverage: wiring
+coverage:
 	@$(PY).stage $(HARNESS) coverage
 
 # A -pkg target without PKG would silently cover every unit instead of one.
@@ -137,6 +132,8 @@ ready:
 	@$(PY).loop ready
 ci:
 	@$(PY).loop ci
+last:
+	@$(PY).loop last
 
 doctor:
 	$(announce)

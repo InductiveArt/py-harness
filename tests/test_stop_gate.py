@@ -33,7 +33,7 @@ def test_the_gate_holds_an_agent_whose_change_fails_the_check(project: Project) 
     project.write("src/demo/loud.py", LOUD)
     result = gate(project)
     assert result.returncode == HELD
-    assert "STATUS: FAILED at stage `lint`" in result.stderr
+    assert "check did not pass: failed lint" in result.stderr
     assert "make check fails. Fix what it names before finishing" in result.stderr
 
 
@@ -89,7 +89,8 @@ def test_the_gate_records_each_decision_in_the_trail(project: Project) -> None:
     project.write("tests/test_unit.py", "def test_passes() -> None:\n    assert True\n")
     gate(project, '{"session_id": "s1", "stop_hook_active": false}')
     assert [entry["decision"] for entry in entries(project.root)] == ["held", "released", "passed"]
-    assert "detail: STATUS: FAILED at stage `lint`" in project.make("audit").stdout
+    held = "detail: check did not pass: failed lint. Logs: .git/py-harness/logs/check"
+    assert held in project.make("audit").stdout
 
 
 # #region Showing the user what the turn changed

@@ -19,13 +19,13 @@ description: Use after changing code in a repository checked by py-harness and b
 
 The three composed loops run these stages in this order, and keep going after a stage fails, so one run names every failing stage:
 
-- `check`: agent, lint-fix, format-fix, format, lint, typecheck, doctor, test.
-- `ready`: install, agent, lint-fix, format-fix, format, lint, typecheck, doctor, coverage.
-- `ci`: install, format, lint, typecheck, doctor, coverage. It never rewrites a file, so what a fix would repair fails instead; it is what a CI server runs, after `uv sync --locked`.
+- `check`: agent, wiring, lint-fix, format-fix, format, lint, typecheck, doctor, test.
+- `ready`: install, agent, wiring, lint-fix, format-fix, format, lint, typecheck, doctor, coverage.
+- `ci`: install, wiring, format, lint, typecheck, doctor, coverage. It never rewrites a file, so what a fix would repair fails instead; it is what a CI server runs, after `uv sync --locked`.
 
 `agent` links the harness's rules and these skills into `.claude/`, pointing into the harness version the repository pins, and lists the links in `.git/info/exclude`, so no commit carries them.
 
-Each ends with a summary: the failing stages (and the unit, for a test stage), the diagnostics grouped by kind, the lines no test runs, every file the run rewrote, and the suppressions: how many the repository holds, how many the change since the last commit added or removed, the rules bypassed most, and each one added. The full log stays at `/tmp/<repository>-<loop>.log`. Read the summary first; open the log only when the summary says it saw nothing it could categorise.
+Each prints one line per stage as it ends, then a block for each stage that did not pass, and its verdict on the last line. A stage that failed found something in the code: its block counts the findings per rule, shows the first few, and names the file holding all of them, one section per source file or test under a `## <path>` heading. Search those headings and read only the section you need. A stage that broke did not finish: its checker crashed, its report could not be read, or it ran past its time limit. Its result is unknown, so it is no finding to fix unless its last lines point at a file you changed; otherwise tell the user. Each stage's whole output is in its log, beside the findings files in `.git/py-harness/logs/<loop>/`. When a run was cut short, `make last` prints the newest run again from those files without running anything. The run also lists every file it rewrote, and the suppressions: how many the repository holds, how many the change since the last commit added or removed, the rules bypassed most, and each one added.
 
 ## Fix tiers
 
@@ -101,7 +101,7 @@ Shared checks: `no-cycles`, `no-reexport`, `no-hidden-names`, `no-comment-overre
 
 Layer contracts go in `[tool.importlinter]` in the root `pyproject.toml`; `boundaries` enforces them, and says so when none are declared.
 
-A repository's own checks go in `.py-harness/doctor/`, named by kind: `rule-*.py` fails on a violation, `drift-*.py` fails on diverged configuration, `report-*.py` only informs. Each is a script that exits non-zero to fail; the resolved units arrive in `PY_HARNESS_UNITS`, one path per line, and the harness's own directory in `PY_HARNESS_DIR`. To appear in the summary, a failing check prints a header ending in `(forbidden):` or `(drift):` followed by one indented line per finding.
+A repository's own checks go in `.py-harness/doctor/`, named by kind: `rule-*.py` fails on a violation, `drift-*.py` fails on diverged configuration, `report-*.py` only informs. Each is a script that exits non-zero to fail; the resolved units arrive in `PY_HARNESS_UNITS`, one path per line, and the harness's own directory in `PY_HARNESS_DIR`. A failing check prints a heading ending in a colon, such as `Import cycles (forbidden):`, then one indented line per finding; the summary shows the heading and the first finding. A check that raises instead of exiting is reported as broken, not as a finding.
 
 ## Suppressions
 

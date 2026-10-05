@@ -1,121 +1,133 @@
-import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeAlias
 
+from py_harness.logs import RUNNING
+from py_harness.logs import RunRecord
+from py_harness.logs import StageRecord
 from py_harness.suppressions import Tally
+from py_harness.verdict import BROKEN
+from py_harness.verdict import FAILED
+from py_harness.verdict import PASSED
+from py_harness.verdict import SKIPPED
 
 # Path to content digest for every file git reports as modified or untracked;
 # None outside a git repository.
 Snapshot: TypeAlias = dict[str, str] | None
 
-
-@dataclass(frozen=True)
-class Category:
-    label: str
-    pattern: re.Pattern[str]
-    limit: int
-    # A matching line heads a block: the indented lines under it belong to it.
-    block: bool = False
-
-
-CATEGORIES = (
-    Category("Wiring problems", re.compile(r"^wiring: "), 20),
-    Category("Agent layer", re.compile(r"^agent: "), 10),
-    Category("Unformatted files", re.compile(r"^\S+:\d+:\d+: unformatted: "), 20),
-    Category("Ruff diagnostics", re.compile(r"^\S+\.pyi?:\d+:\d+: [A-Z]+\d+ "), 20),
-    Category("Type errors", re.compile(r" - error: "), 15),
-    Category("Doctor findings", re.compile(r"\((?:forbidden|drift)\):$"), 30, block=True),
-    Category("Test failures", re.compile(r"^(FAILED|ERROR)[ :]"), 20),
-    Category("Coverage", re.compile(r"^FAIL Required test coverage"), 5),
-    Category(
-        "Uncovered lines (file, then the lines no test runs)",
-        re.compile(r"^\S+\.py\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+(?:\.\d+)?%\s+\S"),
-        20,
-    ),
-)
-FAILED_TARGET = re.compile(r"^make(?:\[\d+\])?: \*\*\* \[[^\]]*:\d+: (?P<target>[^\]]+)\] Error")
-UNIT_MARKER = re.compile(r"^→ (?P<stage>\S+) (?P<unit>.+)$")
-FALLBACK_LINES = 25
+INTERRUPTED = "interrupted"
+WORDS = {PASSED: "ok", FAILED: "failed", BROKEN: "BROKEN", SKIPPED: "skipped"}
+RULES_SHOWN = 6
+TAIL = 10
+# Lines a stage's log holds around its output: the stage's own heading, and make's notices.
+FRAMING = ("→ ", "make: ", "make[")
 MODIFIED_LIMIT = 10
 SUPPRESSION_LIMIT = 20
 COMMON_SHOWN = 3
 
 
-def summarize(
-    log: str,
-    status: int,
-    before: Snapshot,
-    after: Snapshot,
-    suppressions: Tally,
-    log_path: Path,
-) -> list[str]:
-    lines = log.splitlines()
-    report = ["", f"=== summary (full log: {log_path}) ===", status_line(lines, status)]
-    categorized = False
-    for category in CATEGORIES:
-        hits = hits_of(category, lines)
-        if hits:
-            categorized = True
-            report.extend(excerpt(category.label, hits, category.limit))
-    report.extend(modified_files(before, after))
-    report.extend(suppression_lines(suppressions))
-    if status != 0 and not categorized:
-        tail = [line for line in lines if line.strip()][-FALLBACK_LINES:]
-        report.extend(["", f"No categorized diagnostics; last {FALLBACK_LINES} non-empty lines:"])
-        report.extend(f"  {line}" for line in tail)
-    return report
+def outcome(stage: StageRecord) -> str:
+    """A stage the record still holds as running was cut short with the run."""
+    return INTERRUPTED if stage.outcome == RUNNING else stage.outcome
 
 
-def hits_of(category: Category, lines: list[str]) -> list[str]:
-    hits: list[str] = []
-    inside = False
-    for line in lines:
-        if category.pattern.search(line):
-            hits.append(line)
-            inside = category.block
-        elif inside and line.startswith(" "):
-            hits.append(line)
-        else:
-            inside = False
-    return hits
+def stage_line(stage: StageRecord) -> str:
+    state = outcome(stage)
+    detail = f"{stage.headline} " if stage.headline else ""
+    return f"  {stage.name:<11} {WORDS.get(state, state):<8} {detail}({stage.seconds:.1f}s)"
 
 
-def status_line(lines: list[str], status: int) -> str:
-    if status == 0:
-        return "STATUS: PASSED"
-    failed = list(
-        dict.fromkeys(found["target"] for line in lines if (found := FAILED_TARGET.match(line)))
-    )
-    if not failed:
-        return "STATUS: FAILED (stage indeterminate; see the log tail below)"
-    noun = "stage" if len(failed) == 1 else "stages"
-    return f"STATUS: FAILED at {noun} {', '.join(described(target, lines) for target in failed)}"
-
-
-def described(target: str, lines: list[str]) -> str:
-    units = [
-        found["unit"]
-        for line in lines
-        if (found := UNIT_MARKER.match(line)) and found["stage"] == target
-    ]
-    return f"`{target}` in `{units[-1]}`" if units else f"`{target}`"
-
-
-def excerpt(label: str, hits: list[str], limit: int) -> list[str]:
-    lines = ["", f"{label} ({len(hits)}):", *(f"  {hit}" for hit in hits[:limit])]
-    if len(hits) > limit:
-        lines.append(f"  ... ({len(hits)} total)")
+def render(record: RunRecord, root: Path, folder: str, *, table: bool) -> list[str]:
+    """The stage table when asked, a block per stage that did not pass, then the verdict."""
+    lines = [stage_line(stage) for stage in record.stages] if table else []
+    # Stages broken by one cause, such as a config every tool reads, share one telling of it.
+    told: dict[tuple[str, ...], str] = {}
+    for stage in record.stages:
+        lines.extend(block(stage, root, told))
+    lines.extend(record.footer)
+    lines.extend(["", verdict_line(record, folder)])
     return lines
+
+
+def block(stage: StageRecord, root: Path, told: dict[tuple[str, ...], str]) -> list[str]:
+    state = outcome(stage)
+    if state == BROKEN:
+        return broken(stage, root, told)
+    if state == INTERRUPTED:
+        return [
+            "",
+            f"{stage.name}: the run stopped during this stage; its output so far: {stage.log}",
+        ]
+    if state != FAILED:
+        return []
+    lines = ["", f"{stage.name}: {stage.headline or 'failed'}"]
+    if stage.counts:
+        rules = list(stage.counts.items())
+        listed = ", ".join(f"{rule} {number}" for rule, number in rules[:RULES_SHOWN])
+        lines.append(f"  by rule: {listed}" + (", ..." if len(rules) > RULES_SHOWN else ""))
+    if stage.first:
+        lines.extend(f"  {line}" for line in stage.first)
+        lines.append(f"  all of them: {stage.details or stage.log}")
+    else:
+        lines.extend([*tail(root / stage.log), f"  all of its output: {stage.log}"])
+    return lines
+
+
+def broken(stage: StageRecord, root: Path, told: dict[tuple[str, ...], str]) -> list[str]:
+    """What the stage said last, or its own account of what broke, and where all of it is."""
+    evidence = [f"  {line}" for line in stage.first] or tail(root / stage.log)
+    cause = (stage.headline, *evidence)
+    if cause in told:
+        same = f"{stage.name} broke the same way as {told[cause]}"
+        return ["", f"{same}; all of its output: {stage.log}"]
+    told[cause] = stage.name
+    return [
+        "",
+        f"{stage.name} broke: {stage.headline}.",
+        "  Its result is unknown; this is not a finding in the code.",
+        *evidence,
+        f"  all of its output: {stage.log}",
+        "  If those lines point at a file you changed, fix that file; otherwise tell the user.",
+    ]
+
+
+def tail(log: Path) -> list[str]:
+    """The last lines a stage printed, without the lines that only frame its run."""
+    try:
+        text = log.read_text(encoding="utf-8")
+    except OSError:
+        return ["  (its output could not be read)"]
+    lines = [line for line in text.splitlines() if line.strip() and not line.startswith(FRAMING)]
+    if not lines:
+        return ["  (it printed nothing)"]
+    return ["  last lines of its output:", *(f"    {line}" for line in lines[-TAIL:])]
+
+
+def verdict_line(record: RunRecord, folder: str) -> str:
+    """The run's answer, on the last line, where a reader looks first."""
+    seconds = sum(stage.seconds for stage in record.stages)
+    states = [(stage.name, outcome(stage)) for stage in record.stages]
+    if record.finished and all(state == PASSED for _, state in states):
+        return f"{record.loop} passed in {seconds:.1f}s. Logs: {folder}"
+    groups = [
+        f"{state} {', '.join(name for name, found in states if found == state)}"
+        for state in (BROKEN, FAILED, SKIPPED, INTERRUPTED)
+        if any(found == state for _, found in states)
+    ]
+    return f"{record.loop} did not pass: {'; '.join(groups)}. Logs: {folder}"
+
+
+def bare(states: list[tuple[str, str]], loop: str, folder: str) -> list[str]:
+    """What the run can still say when its summary cannot be drawn: each stage, and the logs."""
+    passed = all(state == PASSED for _, state in states)
+    verdict = f"{loop} {'passed' if passed else 'did not pass'}. Logs: {folder}"
+    return [*(f"  {name} {state}" for name, state in states), "", verdict]
 
 
 def modified_files(before: Snapshot, after: Snapshot) -> list[str]:
     """Compares content, so a file dirty before the run still shows when a fix rewrites it."""
     if before is None or after is None:
         return ["", "Files modified during run: unknown outside a git repository"]
-    changed = sorted(
-        path for path in before.keys() | after.keys() if before.get(path) != after.get(path)
-    )
+    changed = changed_files(before, after)
     if not changed:
         return []
     lines = ["", f"Files modified during run (auto-fix surface, {len(changed)}):"]
@@ -123,6 +135,11 @@ def modified_files(before: Snapshot, after: Snapshot) -> list[str]:
     if len(changed) > MODIFIED_LIMIT:
         lines.append(f"  ... ({len(changed)} total)")
     return lines
+
+
+def changed_files(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    paths = before.keys() | after.keys()
+    return sorted(path for path in paths if before.get(path) != after.get(path))
 
 
 def suppression_lines(tally: Tally) -> list[str]:

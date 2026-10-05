@@ -118,6 +118,7 @@ TARGETS = {
     "check": "tests/test_loop.py::test_check_passes_a_clean_project",
     "ready": f"{CONSUMER_TESTS}::test_a_consumer_passes_ready",
     "ci": f"{CONSUMER_TESTS}::test_ci_fails_on_unformatted_code_without_rewriting_it",
+    "last": "tests/test_loop.py::test_make_last_draws_the_newest_run_again",
     "doctor": "tests/test_doctor.py::test_doctor_runs_every_shared_rule",
 }
 

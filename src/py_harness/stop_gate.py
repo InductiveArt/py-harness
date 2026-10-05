@@ -16,11 +16,13 @@ from py_harness.change_gate import latest
 from py_harness.change_gate import tree
 from py_harness.console import err
 from py_harness.console import out
+from py_harness.logs import log_folder
+from py_harness.logs import read_record
+from py_harness.logs import shown
 from py_harness.loop import snapshot
+from py_harness.summary import verdict_line
 from py_harness.transcript import text
 
-SUMMARY = "=== summary"
-STATUS = "STATUS: "
 DONE = {"new file": "created", "destructive": "deleted", "wiring": "edited"}
 
 
@@ -48,10 +50,11 @@ def failing(root: Path, entry: Entry) -> bool:
     if checked.returncode == 0:
         record(root, {**entry, "decision": "passed"})
         return False
-    status = next((line for line in checked.stdout.splitlines() if line.startswith(STATUS)), "")
-    record(root, {**entry, "decision": "held", "detail": status})
-    start = checked.stdout.find(SUMMARY)
-    err(checked.stdout[start:] if start >= 0 else checked.stdout + checked.stderr)
+    folder = log_folder(root, "check")
+    run = read_record(folder)
+    detail = "no record of the run" if run is None else verdict_line(run, shown(folder, root))
+    record(root, {**entry, "decision": "held", "detail": detail})
+    err(checked.stdout + checked.stderr)
     err(
         "make check fails. Fix what it names before finishing, or tell the user why it cannot pass."
     )

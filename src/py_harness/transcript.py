@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import TypeAlias
 from typing import cast
 
+from py_harness.tables import as_table
+
 # One line of the client's session transcript.
 Event: TypeAlias = dict[str, object]
 
@@ -66,11 +68,6 @@ def picked(event: Event) -> list[str]:
     """The user's answers to the agent's questions, which reach it as a tool's result."""
     given = as_table(as_table(event.get("toolUseResult")).get("answers"))
     return [value for value in given.values() if isinstance(value, str)]
-
-
-def as_table(value: object) -> dict[str, object]:
-    """A JSON object read as a table; any other value as an empty one."""
-    return cast("dict[str, object]", value) if isinstance(value, dict) else {}
 
 
 def text(table: dict[str, object], key: str) -> str:

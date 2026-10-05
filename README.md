@@ -137,6 +137,20 @@ uv sync --locked
 make ci
 ```
 
+A composed run prints one line per stage as it ends, then a block for each
+stage that did not pass, and its verdict on the last line. A stage that
+failed found something in the code: its block counts the findings per rule,
+shows the first few, and names the file holding all of them, one section per
+source file or test. A stage that broke did not finish: its checker crashed,
+its report could not be read, or it ran past 900 seconds
+(`PY_HARNESS_STAGE_SECONDS` changes the limit). Its result is unknown, and its
+block shows its last lines instead. A pass is never taken on a stage's word
+alone: its exit code must agree. Each stage's whole output goes to its log,
+beside the findings files, in `.git/py-harness/logs/<loop>/`, where no commit
+carries them; `make last` prints the newest run again from there without
+running anything. Only `ci` also prints every stage's output, since a CI
+server's console is the only log it keeps.
+
 Each unit keeps its code in `src/` and its tests in `tests/` by default. A unit
 laid out otherwise declares it once, in its own `pyproject.toml`: the code
 under `[tool.py-harness] source`, the tests in pytest's own `testpaths`.

@@ -44,3 +44,23 @@ def string_list(table: Table | None, key: str) -> list[str]:
 def string(table: Table | None, key: str) -> str | None:
     value = None if table is None else table.get(key)
     return value if isinstance(value, str) else None
+
+
+def integer(table: Table, key: str) -> int | None:
+    value = table.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def as_table(value: object) -> Table:
+    """A JSON object read as a table; any other value as an empty one."""
+    return cast("Table", value) if isinstance(value, dict) else {}
+
+
+def as_list(value: object) -> list[object]:
+    """A JSON array read as a list; any other value as an empty one."""
+    return items_of(value) or []
+
+
+def items_of(value: object) -> list[object] | None:
+    """The items of a JSON array, or None when the value is not one."""
+    return cast("list[object]", value) if isinstance(value, list) else None

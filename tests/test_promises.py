@@ -9,7 +9,7 @@ from tests.support import REPOSITORY
 from tests.support import Project
 
 RUFF_CODE = re.compile(r"^\S+:\d+:\d+: (?P<code>[A-Z]+\d+) ", re.MULTILINE)
-PYRIGHT_RULE = re.compile(r"\((?P<rule>report\w+)\)")
+PYRIGHT_RULE = re.compile(r"^\S+:\d+:\d+: (?P<rule>report\w+) ", re.MULTILINE)
 
 
 def ruff_codes(project: Project) -> set[str]:

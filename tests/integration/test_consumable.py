@@ -107,14 +107,14 @@ def test_the_wheel_installs_its_configs_at_a_version_free_path(consumer: Project
 def test_a_consumer_passes_ready(consumer: Project) -> None:
     result = run(["make", "-s", "ready"], consumer.root)
     assert result.returncode == 0, result.stdout[-3000:]
-    assert "STATUS: PASSED" in result.stdout
+    assert "\nready passed in " in result.stdout
     assert (consumer.root / ".claude" / "rules" / "py-harness.md").is_file()
 
 
 def test_a_consumer_passes_ci(consumer: Project) -> None:
     result = run(["make", "-s", "ci"], consumer.root)
     assert result.returncode == 0, result.stdout[-3000:]
-    assert "STATUS: PASSED" in result.stdout
+    assert "\nci passed in " in result.stdout
 
 
 def test_ci_fails_on_unformatted_code_without_rewriting_it(consumer: Project) -> None:
@@ -122,7 +122,7 @@ def test_ci_fails_on_unformatted_code_without_rewriting_it(consumer: Project) ->
     result = run(["make", "-s", "ci"], consumer.root)
     written = unformatted.read_text()
     unformatted.unlink()
-    assert "STATUS: FAILED at stages `format`, " in result.stdout
+    assert "ci did not pass: failed format" in result.stdout
     assert written == "x=1\n"
 
 
