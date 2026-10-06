@@ -52,7 +52,7 @@ FACTS = {
 }
 UNQUOTED = "its description quotes nothing the user said"
 NO_TRANSCRIPT = "no transcript shows what the user said"
-BASELINES = "baselines"
+STARTING_TREES = "starting-trees"
 
 
 @dataclass(frozen=True)
@@ -164,12 +164,12 @@ def confirmed(
     return False
 
 
-# #region The session's baseline
+# #region The tree the session started from
 
 
 def remember(root: Path, session: str) -> None:
     """Keeps the working tree as the session's first gated call found it, before any change."""
-    path = baseline(root, session)
+    path = starting_tree(root, session)
     if path is None or path.exists():
         return
     found = tree(root)
@@ -179,10 +179,10 @@ def remember(root: Path, session: str) -> None:
     path.write_text(json.dumps(found), encoding="utf-8")
 
 
-def baseline(root: Path, session: str) -> Path | None:
+def starting_tree(root: Path, session: str) -> Path | None:
     location = trail(root)
     name = re.sub(r"[^\w-]", "_", session)
-    return None if location is None else location.parent / BASELINES / f"{name}.json"
+    return None if location is None else location.parent / STARTING_TREES / f"{name}.json"
 
 
 def tree(root: Path) -> dict[str, str] | None:

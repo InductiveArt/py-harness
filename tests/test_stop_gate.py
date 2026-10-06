@@ -173,7 +173,7 @@ def test_editing_a_file_the_session_found_untracked_is_not_creating_it(project: 
     assert unshown(project.root, "s1") == []
 
 
-def test_without_a_baseline_nothing_is_shown(project: Project) -> None:
+def test_without_a_starting_tree_nothing_is_shown(project: Project) -> None:
     project.write("src/demo/made.py")
     assert unshown(project.root, "s1") == []
 
@@ -184,4 +184,4 @@ def test_an_unreadable_index_shows_nothing(project: Project) -> None:
     (project.root / ".git" / "index").write_text("not an index")
     assert unshown(project.root, "s1") == []
     remember(project.root, "s2")
-    assert not (project.root / ".git" / "py-harness" / "baselines" / "s2.json").exists()
+    assert not (project.root / ".git" / "py-harness" / "starting-trees" / "s2.json").exists()

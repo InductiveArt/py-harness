@@ -202,14 +202,14 @@ def test_without_a_transcript_a_destructive_command_is_held_once_then_marked_unv
     assert entries(project.root)[-1]["detail"].startswith("unverified")
 
 
-# #region The session's baseline
+# #region The tree the session started from
 
 
 def test_the_first_gated_call_keeps_the_tree_as_the_session_found_it(project: Project) -> None:
     hook(project.root, call("Bash", command="ls"))
     project.write("src/demo/later.py")
     hook(project.root, call("Bash", command="ls"))
-    kept = (project.root / ".git" / "py-harness" / "baselines" / "s1.json").read_text()
+    kept = (project.root / ".git" / "py-harness" / "starting-trees" / "s1.json").read_text()
     assert '"src/demo/__init__.py"' in kept
     assert "later.py" not in kept
 

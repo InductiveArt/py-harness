@@ -9,10 +9,10 @@ from py_harness.audit import entries
 from py_harness.audit import record
 from py_harness.change_gate import KEEP_WORKING
 from py_harness.change_gate import Change
-from py_harness.change_gate import baseline
 from py_harness.change_gate import identity
 from py_harness.change_gate import judged
 from py_harness.change_gate import latest
+from py_harness.change_gate import starting_tree
 from py_harness.change_gate import tree
 from py_harness.console import err
 from py_harness.console import out
@@ -88,11 +88,11 @@ def show(changes: list[Change]) -> None:
 
 def outcome(root: Path, session: str) -> list[tuple[Change, str]]:
     """What this session changed in the working tree, of the kinds the gates cover."""
-    path = baseline(root, session)
+    path = starting_tree(root, session)
     now = tree(root)
     if path is None or not path.is_file() or now is None:
         return []
-    # Only the change gate writes a baseline: one string per path.
+    # Only the change gate writes a starting tree: one string per path.
     before = cast("dict[str, str]", json.loads(path.read_text(encoding="utf-8")))
     return [
         (change, state)
