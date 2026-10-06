@@ -162,8 +162,9 @@ workspace are its members, then the root when the root is a project.
 
 A repository's own rules go in `.py-harness/doctor/`, as `rule-*.py`,
 `drift-*.py` or `report-*.py`, and run beside the shared ones. A unit listed in
-`.py-harness/ignore` is covered by no stage, and says so every run. Layer
-contracts go in `[tool.importlinter]`.
+`.py-harness/ignore` is covered by no stage, and says so every run. A
+repository's boundaries, which module may import which, go in
+`[tool.importlinter]`.
 
 ## Don't use
 
@@ -201,8 +202,8 @@ What no check catches, so a passing run does not claim it:
   nothing audits the locked dependencies.
 - Secrets. No stage looks for credentials: catch them where code leaves the
   machine, with push protection or a secret scanner in a pre-commit hook.
-- Undeclared layers. `boundaries` enforces the contracts a repository
-  declares, and says when there are none.
+- Undeclared layers. `boundaries` enforces the boundaries a repository
+  declares, and says when it declares none.
 - Names read through `vars()`, `__dict__` or `attrgetter`. `no-hidden-names`
   finds the other ways a name is hidden.
 - A `conftest.py` hook that deselects tests. Settings that do so are refused;

@@ -160,14 +160,18 @@ def test_findings_without_a_heading_are_not_counted() -> None:
 
 
 def test_a_passing_check_line_says_what_the_check_said_beyond_ok() -> None:
-    skipped = "doctor: boundaries skipped; pyproject.toml declares no contracts"
+    skipped = "doctor: boundaries skipped; pyproject.toml declares none in [tool.importlinter]"
     finished = [
         Checked("rule-boundaries", 0, [skipped], ""),
         Checked("rule-no-cycles", 0, ["doctor: no-cycles OK"], ""),
         Checked("report-shared-names", 0, ["Names (2):", "  a  x.py, y.py", "  b  x.py, z.py"], ""),
     ]
     assert judged(finished).parts == [
-        Part("rule-boundaries", PASSED, "skipped; pyproject.toml declares no contracts"),
+        Part(
+            "rule-boundaries",
+            PASSED,
+            "skipped; pyproject.toml declares none in [tool.importlinter]",
+        ),
         Part("rule-no-cycles", PASSED),
         Part("report-shared-names", PASSED),
     ]

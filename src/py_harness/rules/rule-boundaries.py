@@ -9,17 +9,17 @@ from py_harness.tables import read_table
 from py_harness.tables import subtable
 from py_harness.units import units_in_scope
 
-# Neither kept nor broken: the linter could not check the contracts at all.
+# Neither kept nor crossed: the linter could not check the boundaries at all.
 UNCHECKED = 2
 
 
 def main() -> int:
     root = Path.cwd()
     if subtable(read_table(root / "pyproject.toml"), "tool", "importlinter") is None:
-        out("doctor: boundaries skipped; pyproject.toml declares no [tool.importlinter] contracts")
+        out("doctor: boundaries skipped; pyproject.toml declares none in [tool.importlinter]")
         return 0
-    # Each unit's own source goes first on the path, so the contracts judge
-    # this tree and never an installed copy.
+    # Each unit's own source goes first on the path, so the boundaries are
+    # judged on this tree and never on an installed copy.
     sources = [str(source_root(unit).resolve()) for unit in units_in_scope(root)]
     inherited = [entry for entry in os.environ.get("PYTHONPATH", "").split(os.pathsep) if entry]
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join([*sources, *inherited])}
@@ -32,10 +32,10 @@ def main() -> int:
         return 0
     found = crossings((linted.stdout + linted.stderr).splitlines())
     if not found:
-        # The linter failed without naming a crossing: its contracts could not be checked.
+        # The linter failed without naming a crossing: the boundaries could not be checked.
         sys.stderr.write(linted.stdout + linted.stderr)
         return UNCHECKED
-    out("Broken layer contracts (forbidden):")
+    out("Crossed boundaries (forbidden):")
     for line in found:
         out(f"  {line}")
     return 1

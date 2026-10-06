@@ -256,23 +256,23 @@ exhaustive = true
 """
 
 
-def test_boundaries_is_skipped_without_contracts(project: Project) -> None:
+def test_boundaries_is_skipped_when_none_are_declared(project: Project) -> None:
     result = project.make("doctor", "RULE=boundaries")
     assert result.returncode == 0
     assert (
-        "doctor: boundaries skipped; pyproject.toml declares no [tool.importlinter] contracts"
+        "doctor: boundaries skipped; pyproject.toml declares none in [tool.importlinter]"
         in result.stdout
     )
 
 
-def test_boundaries_fails_a_broken_contract(project: Project) -> None:
+def test_boundaries_fails_a_crossing(project: Project) -> None:
     project.write("pyproject.toml", manifest() + LAYERS)
     project.write("src/demo/high.py", "")
     project.write("src/demo/low.py", "import demo.high\n")
     result = project.make("doctor", "RULE=boundaries")
     assert result.returncode != 0
     crossing = "  demo.low -> demo.high (l.1): demo.low is not allowed to import demo.high\n"
-    assert f"Broken layer contracts (forbidden):\n{crossing}" in result.stdout
+    assert f"Crossed boundaries (forbidden):\n{crossing}" in result.stdout
 
 
 def test_an_indirect_crossing_is_one_finding_with_its_links_under_it(project: Project) -> None:
@@ -295,7 +295,9 @@ def test_a_module_left_out_of_exhaustive_layers_is_a_finding(project: Project) -
     assert "  demo.other: The following modules are not listed as layers\n" in stdout
 
 
-def test_contracts_the_linter_cannot_check_break_the_rule(project: Project, tmp_path: Path) -> None:
+def test_boundaries_the_linter_cannot_check_break_the_rule(
+    project: Project, tmp_path: Path
+) -> None:
     missing = LAYERS.replace('"demo.low"]', '"demo.nowhere"]')
     project.write("pyproject.toml", manifest() + missing)
     project.write("src/demo/high.py", "")
@@ -307,7 +309,7 @@ def test_contracts_the_linter_cannot_check_break_the_rule(project: Project, tmp_
     assert verdict.outcome == BROKEN
 
 
-def test_boundaries_passes_a_kept_contract(project: Project) -> None:
+def test_boundaries_pass_when_nothing_crosses(project: Project) -> None:
     project.write("pyproject.toml", manifest() + LAYERS)
     project.write("src/demo/high.py", "import demo.low\n")
     project.write("src/demo/low.py", "")

@@ -50,7 +50,7 @@ CHECKLIST: dict[str, tuple[str, ...]] = {
         f"{PROMISE_TESTS}::test_lint_enforces[structured-logs]",
     ),
     "ensure.no-todo": (f"{PROMISE_TESTS}::test_lint_enforces[no-todo]",),
-    "ensure.dependency-rules": (f"{RULE_TESTS}::test_boundaries_fails_a_broken_contract",),
+    "ensure.dependency-rules": (f"{RULE_TESTS}::test_boundaries_fails_a_crossing",),
     "fix.format": (
         f"{PROMISE_TESTS}::test_format_rejects_unformatted_code",
         f"{PROMISE_TESTS}::test_format_fix_rewrites_layout",
@@ -120,7 +120,7 @@ TARGETS = {
 SHARED_RULES = {
     "rule-no-reexport": f"{RULE_TESTS}::test_no_reexport_rejects",
     "rule-no-cycles": f"{RULE_TESTS}::test_no_cycles_reports_each_edge_of_a_cycle_with_its_lines",
-    "rule-boundaries": f"{RULE_TESTS}::test_boundaries_fails_a_broken_contract",
+    "rule-boundaries": f"{RULE_TESTS}::test_boundaries_fails_a_crossing",
     "rule-no-comment-overreach": (
         f"{RULE_TESTS}::test_no_comment_overreach_rejects_a_name_out_of_reach"
     ),
