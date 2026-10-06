@@ -32,7 +32,6 @@ CHECKLIST: dict[str, tuple[str, ...]] = {
         f"{STAGE_TESTS}::test_the_callers_pytest_arguments_are_dropped",
         f"{PROMISE_TESTS}::test_lint_enforces[no-unused-suppressions]",
         f"{PROMISE_TESTS}::test_typecheck_enforces[no-unused-suppressions]",
-        f"{RULE_TESTS}::test_a_pragma_that_allows_nothing_fails",
         f"{STAGE_TESTS}::test_an_xfail_that_passes_fails",
         f"{STAGE_TESTS}::test_a_no_cover_pragma_excludes_nothing",
         "tests/test_wiring.py::test_a_ruff_setting_that_can_lower_the_floor_is_a_problem",
@@ -49,10 +48,6 @@ CHECKLIST: dict[str, tuple[str, ...]] = {
     "ensure.no-print": (
         f"{PROMISE_TESTS}::test_lint_enforces[no-print]",
         f"{PROMISE_TESTS}::test_lint_enforces[structured-logs]",
-    ),
-    "ensure.no-secret": (
-        f"{RULE_TESTS}::test_an_untracked_secret_fails",
-        f"{RULE_TESTS}::test_a_staged_secret_fails",
     ),
     "ensure.no-todo": (f"{PROMISE_TESTS}::test_lint_enforces[no-todo]",),
     "ensure.dependency-rules": (f"{RULE_TESTS}::test_boundaries_fails_a_broken_contract",),
@@ -126,7 +121,6 @@ SHARED_RULES = {
     "rule-no-reexport": f"{RULE_TESTS}::test_no_reexport_rejects",
     "rule-no-cycles": f"{RULE_TESTS}::test_no_cycles_reports_each_edge_of_a_cycle_with_its_lines",
     "rule-boundaries": f"{RULE_TESTS}::test_boundaries_fails_a_broken_contract",
-    "rule-no-secrets": f"{RULE_TESTS}::test_an_untracked_secret_fails",
     "rule-no-comment-overreach": (
         f"{RULE_TESTS}::test_no_comment_overreach_rejects_a_name_out_of_reach"
     ),

@@ -16,7 +16,6 @@ TYPE_CHECKER_IGNORE = re.compile(
     r"#\s*(?P<tool>pyright|type):\s*ignore\b(?:\[(?P<rules>[^\]]*)\])?"
 )
 # A pragma counts only where it ends its line; anywhere else it is a mention.
-ALLOWLIST = re.compile(r"pragma: allowlist (?P<nextline>nextline )?secret\s*$")
 # A deleted file is named only on the old side of the diff, a created one only on the new.
 OLD_FILE = re.compile(r"^--- a/(?P<path>.+)$")
 DIFFED_FILE = re.compile(r"^\+\+\+ (?:b/(?P<path>.+)|/dev/null)$")
@@ -71,7 +70,7 @@ def is_added(found: Suppression, changed: Changes) -> bool:
 
 
 def scanned_files(root: Path) -> list[str]:
-    files = [path.as_posix() for path in repository_files(root, lambda _name: True)]
+    files = [path.as_posix() for path in repository_files(root, lambda name: name.endswith(".py"))]
     return [*files, IGNORE_FILE.as_posix()] if (root / IGNORE_FILE).is_file() else files
 
 
@@ -98,12 +97,7 @@ def suppressions_in_text(path: str, text: str) -> list[Suppression]:
     if path == IGNORE_FILE.as_posix():
         return excluded_units(path, text)
     if not path.endswith(".py"):
-        lines = enumerate(text.splitlines(), start=1)
-        return [
-            Suppression(path, number, "allowlist secret", line.strip())
-            for number, line in lines
-            if ALLOWLIST.search(line)
-        ]
+        return []
     return [
         *(found for number, comment in comments(text) for found in parsed(path, number, comment)),
         *bypasses_in_code(path, text),
@@ -133,8 +127,6 @@ def parsed(path: str, number: int, comment: str) -> list[Suppression]:
         found.extend(
             Suppression(path, number, f"{match['tool']} {rule}", comment) for rule in rules
         )
-    if ALLOWLIST.search(comment):
-        found.append(Suppression(path, number, "allowlist secret", comment))
     return found
 
 

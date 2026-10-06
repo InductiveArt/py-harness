@@ -199,7 +199,8 @@ What no check catches, so a passing run does not claim it:
   public function no production path uses.
 - Vulnerable dependencies. `security-scan` is ruff's code-pattern rules;
   nothing audits the locked dependencies.
-- Secrets in git history. `no-secrets` scans the working tree.
+- Secrets. No stage looks for credentials: catch them where code leaves the
+  machine, with push protection or a secret scanner in a pre-commit hook.
 - Undeclared layers. `boundaries` enforces the contracts a repository
   declares, and says when there are none.
 - Names read through `vars()`, `__dict__` or `attrgetter`. `no-hidden-names`
@@ -230,7 +231,7 @@ What no check catches, so a passing run does not claim it:
 - Every bypass is counted: each run reports how many the repository holds and
   how many the change since the last commit added (`src/py_harness/suppressions.py`).
 - Every suppression suppresses something: unused `noqa`, unused type ignores,
-  allowlist pragmas that allow nothing, and passing `xfail` tests all fail.
+  and passing `xfail` tests all fail.
 - The agent reads the rules and skills of the harness version it runs: `make
   check` links them and never copies them, and a file in a link's place fails
   the step (`src/py_harness/agent.py`).

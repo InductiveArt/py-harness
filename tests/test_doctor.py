@@ -25,7 +25,6 @@ def test_doctor_runs_every_shared_rule(project: Project) -> None:
         *verdicts,
         "no-blanket-exemptions OK",
         "no-hidden-names OK",
-        "no-secrets OK",
         "suppressions none",
         "shared-names none",
     ):
@@ -43,7 +42,7 @@ def test_rules_run_first_then_drifts_then_reports(project: Project) -> None:
     project.write(".py-harness/doctor/drift-local.py", 'print("local drift")  # noqa: T201\n')
     stdout = project.make("doctor").stdout
     expected = (
-        "doctor: no-secrets OK",
+        "doctor: no-reexport OK",
         "local rule",
         "local drift",
         "doctor: suppressions none",
@@ -58,7 +57,8 @@ def test_one_line_verdicts_stay_together_and_longer_output_is_set_off(project: P
     project.write(".py-harness/doctor/rule-b.py", 'print("b1\\nb2")  # noqa: T201\n')
     project.write(".py-harness/doctor/report-z.py", 'print("z1\\nz2")  # noqa: T201\n')
     stdout = project.make("doctor").stdout
-    verdicts_then_blocks = "doctor: no-reexport OK\ndoctor: no-secrets OK\n\na1\na2\n\nb1\nb2\n\n"
+    verdicts = "doctor: no-hidden-names OK\ndoctor: no-reexport OK\n\n"
+    verdicts_then_blocks = verdicts + "a1\na2\n\nb1\nb2\n\n"
     assert verdicts_then_blocks + "doctor: shared-names none\n" in stdout
     assert stdout.endswith("doctor: suppressions none\n\nz1\nz2\n")
 

@@ -56,7 +56,6 @@ Each finding has one expected fix. A suppression is not one of them: it is the u
 | `boundaries` | Invert the dependency: the lower layer defines the interface, the higher one implements it. |
 | `no-comment-overreach` | State this file's own contract, or delete the comment. |
 | `no-blanket-exemptions` | Remove the exemption; fix the findings it hid. |
-| `no-secrets` | Read the value from the environment at runtime. |
 | Coverage below 100% | Test the behaviour. Code no test can reach is dead, or needs a seam a test can drive. |
 
 ## Units and layout
@@ -97,7 +96,7 @@ Annotate every signature, and every value whose type inference cannot know (an e
 
 ## Doctor
 
-Shared checks: `no-cycles`, `no-reexport`, `no-hidden-names`, `no-comment-overreach`, `boundaries`, `no-secrets`, `no-blanket-exemptions`, and two reports, which never fail. `suppressions` lists every bypass in the repository by rule and by file, with its density per 1,000 lines of Python. `shared-names` lists each public name defined in more than one module; judge each one: a copy to merge, two meanings to name apart, or a protocol shared on purpose. Imports under `if TYPE_CHECKING:` are the only ones `no-cycles` ignores; an import inside a function still closes a cycle.
+Shared checks: `no-cycles`, `no-reexport`, `no-hidden-names`, `no-comment-overreach`, `boundaries`, `no-blanket-exemptions`, and two reports, which never fail. `suppressions` lists every bypass in the repository by rule and by file, with its density per 1,000 lines of Python. `shared-names` lists each public name defined in more than one module; judge each one: a copy to merge, two meanings to name apart, or a protocol shared on purpose. Imports under `if TYPE_CHECKING:` are the only ones `no-cycles` ignores; an import inside a function still closes a cycle.
 
 Layer contracts go in `[tool.importlinter]` in the root `pyproject.toml`; `boundaries` enforces them, and says so when none are declared.
 
@@ -111,7 +110,6 @@ Every suppression names what it suppresses, covers one line, and must suppress s
 |---|---|---|
 | `# noqa: CODE` | lint | fails |
 | `# pyright: ignore[rule]` | types | fails |
-| `# pragma: allowlist secret` | `no-secrets` | fails |
 | `@pytest.mark.xfail` | tests | a passing test fails; `strict=False` or `run=False` is refused |
 | `cast(T, value)` | types | an unnecessary one fails |
 

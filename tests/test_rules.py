@@ -1,18 +1,9 @@
-import shutil
-
 import pytest
 
 from tests.support import DECLARED_LAYOUT
 from tests.support import Project
 from tests.support import declare_layout
 from tests.support import manifest
-
-# Split, so this file carries no literal key; the name alone still reads as a secret.
-SECRET = "AKIA" + "IOSFODNN7EXAMPLE"  # pragma: allowlist secret
-# Split, so neither of these is a pragma itself.
-PRAGMA = "pragma: " + "allowlist secret"
-NEXTLINE_PRAGMA = "pragma: " + "allowlist nextline secret"
-
 
 # #region no-reexport
 
@@ -271,62 +262,6 @@ def test_boundaries_passes_a_kept_contract(project: Project) -> None:
     assert "doctor: boundaries OK" in project.make("doctor", "RULE=boundaries").stdout
 
 
-# #region no-secrets
-
-
-def secrets_report(project: Project) -> str:
-    return project.make("doctor", "RULE=no-secrets").stdout
-
-
-def test_an_untracked_secret_fails(project: Project) -> None:
-    project.write("config.py", f'KEY = "{SECRET}"\n')
-    assert "config.py:1  AWS Access Key" in secrets_report(project)
-
-
-def test_a_staged_secret_fails(project: Project) -> None:
-    project.write("config.py", f'KEY = "{SECRET}"\n')
-    project.git("add", "config.py")
-    assert "config.py:1  AWS Access Key" in secrets_report(project)
-
-
-def test_a_pragma_allows_the_secret_on_its_line(project: Project) -> None:
-    project.write("config.py", f'KEY = "{SECRET}"  # {PRAGMA}\n')
-    assert "doctor: no-secrets OK" in secrets_report(project)
-
-
-def test_a_nextline_pragma_allows_the_line_below(project: Project) -> None:
-    project.write("config.py", f'# {NEXTLINE_PRAGMA}\nKEY = "{SECRET}"\n')
-    assert "doctor: no-secrets OK" in secrets_report(project)
-
-
-def test_a_pragma_that_allows_nothing_fails(project: Project) -> None:
-    project.write("config.py", f'NAME = "plain"  # {PRAGMA}\n')
-    assert "config.py:1  allowlist pragma allows nothing" in secrets_report(project)
-
-
-def test_a_pragma_mentioned_mid_line_is_not_a_pragma(project: Project) -> None:
-    project.write("NOTES.md", f"End a line with `# {PRAGMA}` to allow a lookalike.\n")
-    assert "doctor: no-secrets OK" in secrets_report(project)
-
-
-def test_the_lockfile_is_not_scanned(project: Project) -> None:
-    project.write("uv.lock", f'hash = "{SECRET}"\n')
-    assert "doctor: no-secrets OK" in secrets_report(project)
-
-
-def test_a_gitignored_file_is_not_scanned(project: Project) -> None:
-    project.write(".gitignore", "local.env\n")
-    project.write("local.env", f"KEY={SECRET}\n")
-    assert "doctor: no-secrets OK" in secrets_report(project)
-
-
-def test_no_secrets_fails_outside_a_git_repository(project: Project) -> None:
-    shutil.rmtree(project.root / ".git")
-    result = project.make("doctor", "RULE=no-secrets")
-    assert result.returncode != 0
-    assert "Secrets not scanned (forbidden):\n  not a git repository" in result.stdout
-
-
 # #region no-comment-overreach
 
 
@@ -502,7 +437,7 @@ def test_report_suppressions_counts_each_rule_and_file(project: Project) -> None
 
 
 def test_report_suppressions_without_python_gives_no_density(project: Project) -> None:
-    project.write("config.yaml", "key: k  # pragma: allowlist secret\n")
+    project.write(".py-harness/ignore", "libs/old\n")
     assert (
         "(1, no lines of Python to compare with)"
         in project.make("doctor", "RULE=suppressions").stdout

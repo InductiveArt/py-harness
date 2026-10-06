@@ -40,7 +40,6 @@ def repository(root: Path) -> Project:
             "x = 1  # type: ignore[attr-defined]\n", ["type attr-defined"], id="type-ignore"
         ),
         pytest.param("x = 1  # type: ignore\n", ["type (every rule)"], id="bare-type-ignore"),
-        pytest.param('KEY = "k"  # pragma: allowlist secret\n', ["allowlist secret"], id="pragma"),
         pytest.param(XFAIL, ["xfail"], id="xfail"),
         pytest.param("from typing import cast\n\nx = cast(int, 1)\n", ["cast"], id="cast"),
         pytest.param("import typing\n\nx = typing.cast(int, 1)\n", ["cast"], id="typing-cast"),
@@ -53,9 +52,8 @@ def test_a_python_file_counts_each_bypassed_rule(text: str, expected: list[str])
     assert labels("src/app.py", text) == expected
 
 
-def test_another_file_counts_a_pragma_only_where_it_ends_its_line() -> None:
-    text = "key: k  # pragma: allowlist secret\nMention `# pragma: allowlist secret` here.\n"
-    assert labels("config.yaml", text) == ["allowlist secret"]
+def test_a_file_that_is_not_python_holds_no_suppression() -> None:
+    assert labels("config.yaml", "key: k  # noqa: E501\n") == []
 
 
 def test_each_excluded_unit_counts() -> None:
@@ -65,14 +63,14 @@ def test_each_excluded_unit_counts() -> None:
 def test_the_inventory_reads_the_whole_repository(tmp_path: Path) -> None:
     project = Project(tmp_path)
     project.write("src/app.py", "x = 1  # noqa: E501\n")
-    project.write("docs/notes.yaml", "key: k  # pragma: allowlist secret\n")
+    project.write("docs/notes.yaml", "key: k  # noqa: E501\n")
     project.write(".py-harness/ignore", "libs/old\n")
     found = sorted(suppression.label for suppression in inventory(project.root))
-    assert found == ["allowlist secret", "excluded unit", "noqa E501"]
+    assert found == ["excluded unit", "noqa E501"]
 
 
 def test_a_file_that_is_not_text_is_skipped(tmp_path: Path) -> None:
-    (tmp_path / "blob.bin").write_bytes(bytes([0xFF, 0xFE, 0x00]))
+    (tmp_path / "blob.py").write_bytes(bytes([0xFF, 0xFE, 0x00]))
     assert inventory(tmp_path) == []
 
 
