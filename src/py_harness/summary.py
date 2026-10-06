@@ -36,9 +36,19 @@ def stage_line(stage: StageRecord) -> str:
     return f"  {stage.name:<11} {WORDS.get(state, state):<8} {detail}({stage.seconds:.1f}s)"
 
 
+def stage_lines(stage: StageRecord) -> list[str]:
+    """The stage's line, then a line for each check it is made of, indented under it."""
+    width = max((len(part.name) for part in stage.parts), default=0)
+    parts = [
+        f"    {part.name:<{width}} {WORDS.get(part.outcome, part.outcome):<8} {part.headline}"
+        for part in stage.parts
+    ]
+    return [stage_line(stage), *(line.rstrip() for line in parts)]
+
+
 def render(record: RunRecord, root: Path, folder: str, *, table: bool) -> list[str]:
     """The stage table when asked, a block per stage that did not pass, then the verdict."""
-    lines = [stage_line(stage) for stage in record.stages] if table else []
+    lines = [line for stage in record.stages for line in stage_lines(stage)] if table else []
     # Stages broken by one cause, such as a config every tool reads, share one telling of it.
     told: dict[tuple[str, ...], str] = {}
     for stage in record.stages:

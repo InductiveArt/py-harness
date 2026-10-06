@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from itertools import takewhile
 from pathlib import Path
 
 from py_harness.console import err
@@ -16,6 +17,7 @@ from py_harness.units import resolve_units
 from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
+from py_harness.verdict import Part
 from py_harness.verdict import Section
 from py_harness.verdict import Verdict
 from py_harness.verdict import report
@@ -81,16 +83,49 @@ def judged(finished: list[Checked]) -> Verdict:
     """Fails on a check that found something; a check that crashed leaves the verdict unknown."""
     crashed = [check for check in finished if check.code not in (0, FOUND)]
     failed = [check for check in finished if check.code == FOUND]
+    passed = len(finished) - len(crashed) - len(failed)
+    headline = f"{passed} passed, {len(failed)} failed"
+    headline += f", {len(crashed)} crashed" if crashed else ""
+    parts = [part(check) for check in finished]
     if not crashed and not failed:
-        return Verdict(PASSED, f"{counted(len(finished), 'check')} passed")
-    groups = ((crashed, "crashed"), (failed, "failed"))
-    parts = [
-        f"{', '.join(check.name for check in group)} {what}" for group, what in groups if group
-    ]
+        return Verdict(PASSED, headline, parts=parts)
     named = [*crashed, *failed]
     first = [f"{check.name}: {gist(check)}" for check in named]
     sections = [Section(check.name, [*check.lines, *check.error.splitlines()]) for check in named]
-    return Verdict(BROKEN if crashed else FAILED, "; ".join(parts), first=first, sections=sections)
+    outcome = BROKEN if crashed else FAILED
+    return Verdict(outcome, headline, first=first, sections=sections, parts=parts)
+
+
+def part(check: Checked) -> Part:
+    """The check's own line under the doctor's: how much it found, or what it said in passing."""
+    if check.code == FOUND:
+        found = findings(check.lines)
+        return Part(check.name, FAILED, "" if found is None else counted(found, "finding"))
+    if check.code != 0:
+        return Part(check.name, BROKEN, f"crashed, exit {check.code}")
+    return Part(check.name, PASSED, said(check))
+
+
+def findings(lines: list[str]) -> int | None:
+    """The lines listed under a check's heading at the least indent: one finding each."""
+    headed = [index for index, line in enumerate(lines) if line.endswith(":") and line[:1] != " "]
+    if not headed:
+        return None
+    listed = list(takewhile(lambda line: line[:1] == " " and line.strip(), lines[headed[0] + 1 :]))
+    least = min((indent(line) for line in listed), default=None)
+    return None if least is None else sum(indent(line) == least for line in listed)
+
+
+def indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def said(check: Checked) -> str:
+    """A passing check's one-line verdict, when it says more than that the check passed."""
+    if len(check.lines) != 1:
+        return ""
+    line = check.lines[0].removeprefix(f"doctor: {check.name.split('-', 1)[-1]} ")
+    return "" if line == "OK" else line
 
 
 def gist(check: Checked) -> str:

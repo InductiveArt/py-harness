@@ -24,7 +24,7 @@ from py_harness.summary import bare
 from py_harness.summary import changed_files
 from py_harness.summary import changed_line
 from py_harness.summary import render
-from py_harness.summary import stage_line
+from py_harness.summary import stage_lines
 from py_harness.summary import suppression_lines
 from py_harness.suppressions import tally
 from py_harness.verdict import BROKEN
@@ -84,7 +84,8 @@ def main(argv: list[str]) -> int:
             now = [*done, running(name, folder, root)]
             write_record(folder, RunRecord(loop, started, False, now, []))
             done.append(run_stage(name, folder, root, limit, stream=loop in STREAMED))
-            out(stage_line(done[-1]))
+            for line in stage_lines(done[-1]):
+                out(line)
     except (KeyboardInterrupt, StopSignalError):
         cut = [running(name, folder, root) for name in stages[len(done) : len(done) + 1]]
         record = RunRecord(loop, started, False, [*done, *cut], [])
@@ -111,7 +112,8 @@ def cleared(folder: Path) -> None:
 
 
 def running(name: str, folder: Path, root: Path) -> StageRecord:
-    return StageRecord(name, RUNNING, 0.0, "", {}, [], shown(folder / f"{name}.log", root), None)
+    log = shown(folder / f"{name}.log", root)
+    return StageRecord(name, RUNNING, 0.0, "", {}, [], log, None, [])
 
 
 def run_stage(name: str, folder: Path, root: Path, limit: int, *, stream: bool) -> StageRecord:
@@ -150,6 +152,7 @@ def run_stage(name: str, folder: Path, root: Path, limit: int, *, stream: bool) 
         verdict.first,
         shown(log, root),
         None if details is None else shown(details, root),
+        verdict.parts,
     )
 
 

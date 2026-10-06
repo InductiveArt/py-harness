@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from py_harness import loop
+from py_harness.doctor import discover
 from py_harness.logs import RUNNING
 from py_harness.logs import RunRecord
 from py_harness.logs import StageRecord
@@ -21,6 +23,7 @@ from py_harness.loop import summary
 from py_harness.summary import bare
 from py_harness.summary import changed_files
 from py_harness.summary import render
+from py_harness.summary import stage_lines
 from py_harness.summary import suppression_lines
 from py_harness.suppressions import Suppression
 from py_harness.suppressions import Tally
@@ -28,6 +31,7 @@ from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
 from py_harness.verdict import SKIPPED
+from py_harness.verdict import Part
 from py_harness.verdict import Verdict
 from tests.support import PASSING
 from tests.support import VENV
@@ -87,10 +91,12 @@ def test_check_passes_a_clean_project(project: Project) -> None:
     assert last_line(result.stdout).endswith(f"s. Logs: {LOGS}")
 
 
-def test_check_prints_one_line_per_stage(project: Project) -> None:
+def test_check_prints_one_line_per_stage_and_per_doctor_check(project: Project) -> None:
     stdout = passing_project(project).make("check").stdout
-    named = [line.split()[0] for line in stdout.splitlines() if line.startswith("  ")]
+    named = [line.split()[0] for line in stdout.splitlines() if re.match(r"  \S", line)]
     assert named == list(loop.LOOPS["check"])
+    checks = [line.split()[0] for line in stdout.splitlines() if re.match(r"    \S", line)]
+    assert checks == [check.stem for check in discover(project.root)]
 
 
 def test_check_keeps_each_stages_output_in_its_log(project: Project) -> None:
@@ -146,6 +152,18 @@ def test_check_runs_the_doctor(project: Project) -> None:
     project.write("src/demo/b.py", "import demo.a\n\nNEIGHBOUR = demo.a\n")
     stdout = project.make("check").stdout
     assert "  rule-no-cycles: Import cycles (forbidden): cycle in .:" in stdout
+    assert re.search(r"\n    rule-no-cycles +failed +1 finding\n", stdout)
+
+
+def test_a_check_gets_its_own_line_under_its_stage() -> None:
+    parts = [Part("rule-a", PASSED), Part("rule-long-name", FAILED, "2 findings")]
+    headline = "1 passed, 1 failed"
+    doctor = StageRecord("doctor", FAILED, 0.5, headline, {}, [], "doctor.log", None, parts)
+    assert stage_lines(doctor) == [
+        "  doctor      failed   1 passed, 1 failed (0.5s)",
+        "    rule-a         ok",
+        "    rule-long-name failed   2 findings",
+    ]
 
 
 def test_check_names_every_failing_stage(project: Project) -> None:
@@ -247,7 +265,8 @@ def test_a_crashing_doctor_check_is_broken_with_its_error(project: Project) -> N
         ".py-harness/doctor/rule-boom.py", 'raise RuntimeError("boom")\n'
     )
     stdout = project.make("check").stdout
-    assert "doctor broke: rule-boom crashed.\n" in stdout
+    assert re.search(r"\ndoctor broke: \d+ passed, 0 failed, 1 crashed\.\n", stdout)
+    assert re.search(r"\n    rule-boom +BROKEN +crashed, exit 70\n", stdout)
     assert "  rule-boom: RuntimeError: boom\n" in stdout
 
 
@@ -330,7 +349,7 @@ def stage(
     counts: dict[str, int] | None = None,
     first: list[str] | None = None,
 ) -> StageRecord:
-    return StageRecord(name, outcome, 0.5, "", counts or {}, first or [], f"{name}.log", None)
+    return StageRecord(name, outcome, 0.5, "", counts or {}, first or [], f"{name}.log", None, [])
 
 
 def drawn(*stages: StageRecord, root: Path = Path(), finished: bool = True) -> str:

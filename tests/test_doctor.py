@@ -8,6 +8,9 @@ from py_harness.doctor import Checked
 from py_harness.doctor import judged
 from py_harness.guard import CRASHED
 from py_harness.verdict import BROKEN
+from py_harness.verdict import FAILED
+from py_harness.verdict import PASSED
+from py_harness.verdict import Part
 from tests.support import SHARE
 from tests.support import Project
 
@@ -129,8 +132,45 @@ def test_a_crashed_check_breaks_the_doctor_and_names_its_error() -> None:
     ]
     verdict = judged(finished)
     assert verdict.outcome == BROKEN
-    assert verdict.headline == "rule-b crashed; rule-c failed"
+    assert verdict.headline == "1 passed, 1 failed, 1 crashed"
     assert verdict.first == ["rule-b: ValueError: x", "rule-c: Header (forbidden): a.py:1  why"]
+    assert verdict.parts == [
+        Part("rule-a", PASSED),
+        Part("rule-b", BROKEN, "crashed, exit 70"),
+        Part("rule-c", FAILED, "1 finding"),
+    ]
+
+
+def test_a_finding_is_a_line_under_the_heading_at_the_least_indent() -> None:
+    cycles = [
+        "Import cycles (forbidden):",
+        "  cycle in .:",
+        "    a -> b (line 1)",
+        "    b -> a (line 1)",
+        "  cycle in libs:",
+        "    c -> d (line 2)",
+        "",
+        "Rule: the import graph is acyclic.",
+    ]
+    assert judged([Checked("rule-no-cycles", 1, cycles, "")]).parts[0].headline == "2 findings"
+
+
+def test_findings_without_a_heading_are_not_counted() -> None:
+    assert judged([Checked("rule-a", 1, ["one line"], "")]).parts == [Part("rule-a", FAILED)]
+
+
+def test_a_passing_check_line_says_what_the_check_said_beyond_ok() -> None:
+    skipped = "doctor: boundaries skipped; pyproject.toml declares no contracts"
+    finished = [
+        Checked("rule-boundaries", 0, [skipped], ""),
+        Checked("rule-no-cycles", 0, ["doctor: no-cycles OK"], ""),
+        Checked("report-shared-names", 0, ["Names (2):", "  a  x.py, y.py", "  b  x.py, z.py"], ""),
+    ]
+    assert judged(finished).parts == [
+        Part("rule-boundaries", PASSED, "skipped; pyproject.toml declares no contracts"),
+        Part("rule-no-cycles", PASSED),
+        Part("report-shared-names", PASSED),
+    ]
 
 
 def test_a_finding_without_a_heading_is_given_whole() -> None:

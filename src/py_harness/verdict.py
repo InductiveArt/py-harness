@@ -29,6 +29,15 @@ class Section:
 
 
 @dataclass(frozen=True)
+class Part:
+    """One of the checks a stage is made of, with its own outcome and line."""
+
+    name: str
+    outcome: str
+    headline: str = ""
+
+
+@dataclass(frozen=True)
 class Verdict:
     """A stage's outcome, and what it found: counted per rule, the first few, and all by section."""
 
@@ -37,6 +46,7 @@ class Verdict:
     counts: dict[str, int] = field(default_factory=dict[str, int])
     first: list[str] = field(default_factory=list[str])
     sections: list[Section] = field(default_factory=list[Section])
+    parts: list[Part] = field(default_factory=list[Part])
 
 
 def report(verdict: Verdict) -> None:
@@ -70,11 +80,23 @@ def read_verdict(path: Path) -> Verdict | None:
         counts={rule: number for rule in counts if (number := integer(counts, rule)) is not None},
         first=string_list(table, "first"),
         sections=[section(as_table(each)) for each in as_list(table.get("sections"))],
+        parts=parts_of(table),
     )
 
 
 def section(table: Table) -> Section:
     return Section(string(table, "title") or "", string_list(table, "lines"))
+
+
+def parts_of(table: Table) -> list[Part]:
+    return [
+        Part(
+            string(part, "name") or "?",
+            string(part, "outcome") or "",
+            string(part, "headline") or "",
+        )
+        for part in (as_table(each) for each in as_list(table.get("parts")))
+    ]
 
 
 def decoded(text: str) -> object:

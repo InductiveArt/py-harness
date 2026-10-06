@@ -12,7 +12,9 @@ from py_harness.tables import as_table
 from py_harness.tables import integer
 from py_harness.tables import string
 from py_harness.tables import string_list
+from py_harness.verdict import Part
 from py_harness.verdict import decoded
+from py_harness.verdict import parts_of
 from py_harness.verdict import write_whole
 
 LOGS = "py-harness/logs"
@@ -32,6 +34,7 @@ class StageRecord:
     # Each from the repository root: the stage's whole output, and its findings when it has any.
     log: str
     details: str | None
+    parts: list[Part]
 
 
 @dataclass(frozen=True)
@@ -90,4 +93,5 @@ def stage_record(table: Table) -> StageRecord:
         first=string_list(table, "first"),
         log=string(table, "log") or "",
         details=string(table, "details"),
+        parts=parts_of(table),
     )

@@ -5,6 +5,7 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeAlias
 
@@ -205,7 +206,7 @@ def together(passed: list[Judged]) -> Verdict:
 
 def stopped(verdict: Verdict, left: int) -> Verdict:
     headline = f"{verdict.headline}; {counted(left, 'unit')} after it not run"
-    return Verdict(verdict.outcome, headline, verdict.counts, verdict.first, verdict.sections)
+    return replace(verdict, headline=headline)
 
 
 def perform(

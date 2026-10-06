@@ -101,7 +101,7 @@ Shared checks: `no-cycles`, `no-reexport`, `no-hidden-names`, `no-comment-overre
 
 Layer contracts go in `[tool.importlinter]` in the root `pyproject.toml`; `boundaries` enforces them, and says so when none are declared.
 
-A repository's own checks go in `.py-harness/doctor/`, named by kind: `rule-*.py` fails on a violation, `drift-*.py` fails on diverged configuration, `report-*.py` only informs. Each is a script that exits non-zero to fail; the resolved units arrive in `PY_HARNESS_UNITS`, one path per line, and the harness's own directory in `PY_HARNESS_DIR`. A failing check prints a heading ending in a colon, such as `Import cycles (forbidden):`, then one indented line per finding; the summary shows the heading and the first finding. A check that raises instead of exiting is reported as broken, not as a finding.
+A repository's own checks go in `.py-harness/doctor/`, named by kind: `rule-*.py` fails on a violation, `drift-*.py` fails on diverged configuration, `report-*.py` only informs. Each is a script that exits non-zero to fail; the resolved units arrive in `PY_HARNESS_UNITS`, one path per line, and the harness's own directory in `PY_HARNESS_DIR`. A failing check prints a heading ending in a colon, such as `Import cycles (forbidden):`, then one indented line per finding, with any detail of a finding indented further; the summary gives each check its own line under the doctor's, with how many findings a failing one listed, and shows the heading and the first finding. A passing check prints one line, `doctor: <name> OK`, or what else it has to say, such as why it skipped. A check that raises instead of exiting is reported as broken, not as a finding.
 
 ## Suppressions
 

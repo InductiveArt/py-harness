@@ -12,10 +12,14 @@ from py_harness.findings import failed_tests
 from py_harness.findings import relative
 from py_harness.findings import ruff_findings
 from py_harness.findings import unformatted
+from py_harness.logs import RunRecord
+from py_harness.logs import StageRecord
 from py_harness.logs import read_record
+from py_harness.logs import write_record
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
 from py_harness.verdict import VERDICT_VARIABLE
+from py_harness.verdict import Part
 from py_harness.verdict import Section
 from py_harness.verdict import Verdict
 from py_harness.verdict import read_verdict
@@ -124,7 +128,9 @@ def test_a_verdict_arrives_whole(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     target = tmp_path / "lint.verdict"
     monkeypatch.setenv(VERDICT_VARIABLE, str(target))
     sections = [Section("a.py (1)", ["1:1: T201 x"])]
-    verdict = Verdict(FAILED, "1 finding in 1 file", {"T201": 1}, ["a.py:1:1: T201 x"], sections)
+    parts = [Part("rule-a", FAILED, "1 finding")]
+    first = ["a.py:1:1: T201 x"]
+    verdict = Verdict(FAILED, "1 finding in 1 file", {"T201": 1}, first, sections, parts)
     report(verdict)
     assert read_verdict(target) == verdict
 
@@ -135,6 +141,14 @@ def test_a_file_that_holds_no_verdict_reads_as_none(tmp_path: Path) -> None:
     assert read_verdict(tmp_path / "unknown") is None
     assert read_verdict(tmp_path / "garbled") is None
     assert read_verdict(tmp_path / "missing") is None
+
+
+def test_a_run_record_reads_back_whole(tmp_path: Path) -> None:
+    parts = [Part("rule-a", PASSED, "skipped; nothing to check")]
+    stage = StageRecord("doctor", PASSED, 1.5, "1 passed, 0 failed", {}, [], "d.log", None, parts)
+    record = RunRecord("check", "2026-10-06T00:00:00+00:00", True, [stage], ["footer"])
+    write_record(tmp_path, record)
+    assert read_record(tmp_path) == record
 
 
 def test_a_run_record_without_its_loop_reads_as_none(tmp_path: Path) -> None:
