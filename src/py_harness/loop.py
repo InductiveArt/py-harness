@@ -36,7 +36,7 @@ from py_harness.verdict import read_verdict
 
 # Each loop answers one question. `check` and `ready` serve an agent at work,
 # so they fix before they judge; `ci` judges code as committed, so it never
-# rewrites a file and fails on what a fix would have repaired. Fixes run before
+# fixes code and fails on what a fix would have repaired. Fixes run before
 # any check, since removing an import changes the graph the doctor reads; lint
 # fixes run before formatting, since a rewritten import may need wrapping again.
 # Every stage runs even after one fails, so a single run names every failing stage.

@@ -43,6 +43,12 @@ def test_a_checker_report_that_is_not_one_reads_as_none() -> None:
     assert unformatted("{}", ROOT) is None
 
 
+def test_a_report_after_a_baseline_update_is_read() -> None:
+    notice = "updated ./.basedpyright/baseline.json with 2 errors (went down by 3)\n\n"
+    report_text = json.dumps({"generalDiagnostics": [diagnostic("error")]})
+    assert len(basedpyright_errors(notice + report_text, ROOT) or []) == 1
+
+
 def test_a_finding_is_placed_one_based_from_the_repository_root() -> None:
     report_text = json.dumps({"generalDiagnostics": [diagnostic("error", 4, "Bad\n  because")]})
     [finding] = basedpyright_errors(report_text, ROOT) or []

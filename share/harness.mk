@@ -13,7 +13,7 @@ announce = @printf '\n→ %s\n' '$@'
 
 .PHONY: help units wiring install agent audit clean update \
         format format-fix lint lint-fix lint-fix-unsafe \
-        typecheck typecheck-pkg test test-pkg test-integration coverage \
+        typecheck typecheck-pkg baseline test test-pkg test-integration coverage \
         check ready ci last doctor
 
 # #region Orientation
@@ -41,6 +41,7 @@ help:
 	@echo "Types:"
 	@echo "  typecheck         basedpyright over the whole repo"
 	@echo "  typecheck-pkg     one unit, PKG=<project name>"
+	@echo "  baseline          record today's type errors, so only new ones fail; the user's call"
 	@echo ""
 	@echo "Tests, per unit:"
 	@echo "  test              every test not marked integration"
@@ -51,7 +52,7 @@ help:
 	@echo "Composed:"
 	@echo "  check         did I break what I just touched - fixes, lint, types, doctor, tests"
 	@echo "  ready         is this ready to commit - install, fixes, lint, types, doctor, coverage"
-	@echo "  ci            does the code as committed pass - the same, never fixing a file"
+	@echo "  ci            does the code as committed pass - the same, never fixing code"
 	@echo "  last          the newest check, ready or ci run again, from its logs, running nothing"
 	@echo "  doctor        structural health (RULE=<name> runs one rule)"
 
@@ -109,6 +110,8 @@ typecheck:
 	@$(PY).stage $(HARNESS) typecheck
 typecheck-pkg:
 	@$(PY).stage $(HARNESS) typecheck $(call required_pkg)
+baseline:
+	@$(PY).baseline $(HARNESS)
 
 # #region Tests
 

@@ -273,6 +273,7 @@ def test_a_ruff_setting_that_only_adds_is_allowed(project: Project, setting: str
         ),
         pytest.param('typeCheckingMode = "standard"\n', "typeCheckingMode", id="mode"),
         pytest.param('ignore = ["src"]\n', "ignore", id="ignore"),
+        pytest.param('baselineFile = "old.json"\n', "baselineFile", id="baseline-elsewhere"),
     ],
 )
 def test_a_basedpyright_setting_that_can_lower_the_floor_is_a_problem(

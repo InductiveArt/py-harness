@@ -1,4 +1,5 @@
 import os
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,8 @@ from py_harness.verdict import Verdict
 from py_harness.verdict import decoded
 
 FIRST = 5
+# basedpyright announces each rewrite of its baseline on a line of its own, before its report.
+BASELINE_UPDATED = re.compile(r"\Aupdated \S+ with \d+ errors? \([^)\n]*\)\n")
 
 
 @dataclass(frozen=True)
@@ -106,7 +109,7 @@ def ruff_finding(table: Table, root: Path) -> Finding:
 
 
 def basedpyright_errors(stdout: str, root: Path) -> list[Finding] | None:
-    table = as_table(decoded(stdout))
+    table = as_table(decoded(BASELINE_UPDATED.sub("", stdout, count=1)))
     if "generalDiagnostics" not in table:
         return None
     diagnostics = [as_table(item) for item in as_list(table.get("generalDiagnostics"))]

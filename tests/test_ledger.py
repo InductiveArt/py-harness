@@ -114,6 +114,7 @@ TARGETS = {
     "ready": f"{CONSUMER_TESTS}::test_a_consumer_passes_ready",
     "ci": f"{CONSUMER_TESTS}::test_ci_fails_on_unformatted_code_without_rewriting_it",
     "last": "tests/test_loop.py::test_make_last_draws_the_newest_run_again",
+    "baseline": "tests/test_baseline.py::test_a_recorded_error_no_longer_fails",
     "doctor": "tests/test_doctor.py::test_doctor_runs_every_shared_rule",
 }
 

@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TypeAlias
 
+from py_harness.baseline import recorded_line
 from py_harness.console import err
 from py_harness.console import out
 from py_harness.findings import FIRST
@@ -293,10 +294,13 @@ def judge_typecheck(ran: Ran, root: Path) -> Judged:
     found = basedpyright_errors(ran.stdout, root) if ran.code in (CLEAN, FOUND) else None
     if found is None or (ran.code == FOUND) != bool(found):
         return broke("basedpyright", ran)
+    record = recorded_line(root)
     if not found:
-        return Judged(Verdict(PASSED))
+        return Judged(Verdict(PASSED, record))
     shown = [line for finding in found for line in finding.shown()]
-    return Judged(by_file(found, "error"), shown)
+    verdict = by_file(found, "error")
+    headline = f"{verdict.headline}; {record}" if record else verdict.headline
+    return Judged(replace(verdict, headline=headline), shown)
 
 
 def judge_tests(ran: Ran, root: Path) -> Judged:

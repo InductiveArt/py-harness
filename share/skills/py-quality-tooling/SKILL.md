@@ -21,7 +21,7 @@ The three composed loops run these stages in this order, and keep going after a 
 
 - `check`: agent, wiring, lint-fix, format-fix, format, lint, typecheck, doctor, test.
 - `ready`: install, agent, wiring, lint-fix, format-fix, format, lint, typecheck, doctor, coverage.
-- `ci`: install, wiring, format, lint, typecheck, doctor, coverage. It never rewrites a file, so what a fix would repair fails instead; it is what a CI server runs, after `uv sync --locked`.
+- `ci`: install, wiring, format, lint, typecheck, doctor, coverage. It never fixes code, so what a fix would repair fails instead; it is what a CI server runs, after `uv sync --locked`.
 
 `agent` links the harness's rules and these skills into `.claude/`, pointing into the harness version the repository pins, and lists the links in `.git/info/exclude`, so no commit carries them.
 
@@ -115,7 +115,7 @@ Every suppression names what it suppresses, covers one line, and must suppress s
 
 Anything wider is refused. `no-blanket-exemptions` rejects a file-level `# pyright:` directive, a `# type: ignore` on a line of its own, `# ruff: noqa` or `# flake8: noqa`, `# fmt: off` or `# fmt: skip`, and `# isort: skip_file`, `skip` or `off`. Skipping a test through pytest or unittest, ending one early with `pytest.xfail()`, and `@no_type_check` are lint findings. A repository's own ruff and basedpyright settings may add rules and describe the environment, never remove or lower one: `wiring` refuses an `ignore`, a per-file ignore, a replaced `select`, a raised threshold, a type rule or mode below the shared one, a pytest setting that changes which tests run or how they count (`addopts`, the collection patterns, `xfail_strict`), and pytest settings anywhere but `pyproject.toml`. The test stages drop `PYTEST_ADDOPTS` from the environment they run in.
 
-There is no baseline file, no skip list and no way to exclude a finding from outside the code. `.py-harness/ignore` removes a whole unit from every stage and announces it on every run; it is for units outside the bar, never for silencing a finding inside one.
+The one way to exclude a finding from outside the code is the type baseline, `.basedpyright/baseline.json`, written by `make baseline`: it records the type errors a codebase has when it adopts the harness, so `typecheck` fails only on new ones. Recording is the user's call, never a way past a finding. A recorded error is matched by its file, rule and place on its line, so moving code does not free it; fixing it drops it from the file on the next run, so leave the shrunk file in the change. The `typecheck` line says how many errors are recorded and how many the change since the last commit added or fixed. There is no skip list. `.py-harness/ignore` removes a whole unit from every stage and announces it on every run; it is for units outside the bar, never for silencing a finding inside one.
 
 ## Change procedure
 

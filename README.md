@@ -128,7 +128,7 @@ Then `make help` lists every target. The composed ones are named for the
 question each answers: `check` is "did I break what I just touched", `ready`
 is "is this ready to commit". Both fix before they judge, as an agent at work
 wants. `ci` is "does the code as committed pass": the same checks as `ready`,
-never rewriting a file, so what a fix would repair fails instead. Any CI server
+never fixing code, so what a fix would repair fails instead. Any CI server
 runs it the same way, as a Jenkins stage, a GitHub Actions step or a GitLab
 job:
 
@@ -165,6 +165,20 @@ A repository's own rules go in `.py-harness/doctor/`, as `rule-*.py`,
 `.py-harness/ignore` is covered by no stage, and says so every run. A
 repository's boundaries, which module may import which, go in
 `[tool.importlinter]`.
+
+An existing codebase adopts the harness with its type errors as they are.
+`make baseline` records every type error the code has today in
+`.basedpyright/baseline.json`, which basedpyright reads: a recorded error no
+longer fails `typecheck`, and every new one does. An error is matched by its
+file, its rule and where it sits on its line, so code moving around it does
+not free it. Fixing one drops it from the file on the next run, so it cannot
+come back unseen; the file grows only through `make baseline`, which is the
+user's call. Commit the file with the code. The `typecheck` line counts what
+the file holds, and what the change since the last commit added or fixed:
+
+```
+  typecheck   ok       2406 recorded (-12 since the last commit)
+```
 
 ## Don't use
 
@@ -231,6 +245,9 @@ What no check catches, so a passing run does not claim it:
   may only add rules or describe the environment (`src/py_harness/wiring.py`).
 - Every bypass is counted: each run reports how many the repository holds and
   how many the change since the last commit added (`src/py_harness/suppressions.py`).
+- Every recorded type error is counted: the `typecheck` line reports how many
+  the baseline holds and how many the change since the last commit added or
+  fixed (`src/py_harness/baseline.py`).
 - Every suppression suppresses something: unused `noqa`, unused type ignores,
   and passing `xfail` tests all fail.
 - The agent reads the rules and skills of the harness version it runs: `make
