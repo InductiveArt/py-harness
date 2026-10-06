@@ -1,5 +1,11 @@
+from pathlib import Path
+
 import pytest
 
+from py_harness.doctor import findings
+from py_harness.verdict import BROKEN
+from py_harness.verdict import VERDICT_VARIABLE
+from py_harness.verdict import read_verdict
 from tests.support import DECLARED_LAYOUT
 from tests.support import Project
 from tests.support import declare_layout
@@ -237,6 +243,19 @@ layers = ["demo.high", "demo.low"]
 """
 
 
+EXHAUSTIVE_LAYERS = """
+[tool.importlinter]
+root_package = "demo"
+
+[[tool.importlinter.contracts]]
+name = "layers"
+type = "layers"
+containers = ["demo"]
+layers = ["high", "low"]
+exhaustive = true
+"""
+
+
 def test_boundaries_is_skipped_without_contracts(project: Project) -> None:
     result = project.make("doctor", "RULE=boundaries")
     assert result.returncode == 0
@@ -252,7 +271,40 @@ def test_boundaries_fails_a_broken_contract(project: Project) -> None:
     project.write("src/demo/low.py", "import demo.high\n")
     result = project.make("doctor", "RULE=boundaries")
     assert result.returncode != 0
-    assert "demo.low is not allowed to import demo.high" in result.stdout
+    crossing = "  demo.low -> demo.high (l.1): demo.low is not allowed to import demo.high\n"
+    assert f"Broken layer contracts (forbidden):\n{crossing}" in result.stdout
+
+
+def test_an_indirect_crossing_is_one_finding_with_its_links_under_it(project: Project) -> None:
+    project.write("pyproject.toml", manifest() + LAYERS)
+    project.write("src/demo/high.py", "")
+    project.write("src/demo/middle.py", "import demo.high\n")
+    project.write("src/demo/low.py", "import demo.middle\n")
+    stdout = project.make("doctor", "RULE=boundaries").stdout
+    first = "  demo.low -> demo.middle (l.1): demo.low is not allowed to import demo.high\n"
+    assert f"{first}    demo.middle -> demo.high (l.1)\n" in stdout
+    assert findings(stdout.splitlines()) == 1
+
+
+def test_a_module_left_out_of_exhaustive_layers_is_a_finding(project: Project) -> None:
+    project.write("pyproject.toml", manifest() + EXHAUSTIVE_LAYERS)
+    project.write("src/demo/high.py", "")
+    project.write("src/demo/low.py", "")
+    project.write("src/demo/other.py", "")
+    stdout = project.make("doctor", "RULE=boundaries").stdout
+    assert "  demo.other: The following modules are not listed as layers\n" in stdout
+
+
+def test_contracts_the_linter_cannot_check_break_the_rule(project: Project, tmp_path: Path) -> None:
+    missing = LAYERS.replace('"demo.low"]', '"demo.nowhere"]')
+    project.write("pyproject.toml", manifest() + missing)
+    project.write("src/demo/high.py", "")
+    target = tmp_path / "doctor.verdict"
+    result = project.make("doctor", "RULE=boundaries", environment={VERDICT_VARIABLE: str(target)})
+    assert "demo.nowhere does not exist" in result.stderr
+    verdict = read_verdict(target)
+    assert verdict is not None
+    assert verdict.outcome == BROKEN
 
 
 def test_boundaries_passes_a_kept_contract(project: Project) -> None:

@@ -9,6 +9,9 @@ from py_harness.tables import read_table
 from py_harness.tables import subtable
 from py_harness.units import units_in_scope
 
+# Neither kept nor broken: the linter could not check the contracts at all.
+UNCHECKED = 2
+
 
 def main() -> int:
     root = Path.cwd()
@@ -27,11 +30,36 @@ def main() -> int:
     if linted.returncode == 0:
         out("doctor: boundaries OK")
         return 0
+    found = crossings((linted.stdout + linted.stderr).splitlines())
+    if not found:
+        # The linter failed without naming a crossing: its contracts could not be checked.
+        sys.stderr.write(linted.stdout + linted.stderr)
+        return UNCHECKED
     out("Broken layer contracts (forbidden):")
-    for line in (linted.stdout + linted.stderr).splitlines():
-        if line.strip():
-            out(f"  {line}")
+    for line in found:
+        out(f"  {line}")
     return 1
+
+
+def crossings(report: list[str]) -> list[str]:
+    """One line per import that crosses a boundary, or module left out of the layers.
+
+    The linter lists each under the heading it breaks, as a line opening with `- `;
+    the further links of an indirect import follow it, indented, and stay under it.
+    """
+    found: list[str] = []
+    heading = ""
+    chained = False
+    for line in report:
+        if line.startswith("- "):
+            found.append(f"{line.removeprefix('- ')}: {heading}")
+            chained = True
+        elif chained and line.startswith("  "):
+            found.append(f"  {line.strip()}")
+        else:
+            chained = False
+            heading = line.removesuffix(":") if line.endswith(":") else heading
+    return found
 
 
 if __name__ == "__main__":
