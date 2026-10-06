@@ -20,7 +20,7 @@ RULES_SHOWN = 6
 TAIL = 10
 # Lines a stage's log holds around its output: the stage's own heading, and make's notices.
 FRAMING = ("→ ", "make: ", "make[")
-MODIFIED_LIMIT = 10
+CHANGED_SHOWN = 5
 SUPPRESSION_LIMIT = 20
 COMMON_SHOWN = 3
 
@@ -123,21 +123,18 @@ def bare(states: list[tuple[str, str]], loop: str, folder: str) -> list[str]:
     return [*(f"  {name} {state}" for name, state in states), "", verdict]
 
 
-def modified_files(before: Snapshot, after: Snapshot) -> list[str]:
-    """Compares content, so a file dirty before the run still shows when a fix rewrites it."""
-    if before is None or after is None:
-        return ["", "Files modified during run: unknown outside a git repository"]
-    changed = changed_files(before, after)
+def changed_line(changed: list[str] | None, listed: str) -> list[str]:
+    """One line: the files themselves when they are few, else how many and where all are listed."""
+    if changed is None:
+        return ["", "Files changed during the run: unknown outside a git repository"]
     if not changed:
         return []
-    lines = ["", f"Files modified during run (auto-fix surface, {len(changed)}):"]
-    lines.extend(f"  {path}" for path in changed[:MODIFIED_LIMIT])
-    if len(changed) > MODIFIED_LIMIT:
-        lines.append(f"  ... ({len(changed)} total)")
-    return lines
+    named = ", ".join(changed) if len(changed) <= CHANGED_SHOWN else f"all of them: {listed}"
+    return ["", f"Files changed during the run ({len(changed)}): {named}"]
 
 
 def changed_files(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """Compares content, so a file dirty before the run still shows when a fix rewrites it."""
     paths = before.keys() | after.keys()
     return sorted(path for path in paths if before.get(path) != after.get(path))
 

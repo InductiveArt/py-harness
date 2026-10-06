@@ -19,7 +19,7 @@ from py_harness.loop import main
 from py_harness.loop import run_stage
 from py_harness.loop import summary
 from py_harness.summary import bare
-from py_harness.summary import modified_files
+from py_harness.summary import changed_files
 from py_harness.summary import render
 from py_harness.summary import suppression_lines
 from py_harness.suppressions import Suppression
@@ -137,7 +137,7 @@ def test_a_findings_file_holds_a_section_per_file(project: Project) -> None:
 def test_check_names_a_failing_test_and_its_error(project: Project) -> None:
     project.write("tests/test_unit.py", FAILING)
     stdout = project.make("check").stdout
-    named = "test: 1 failed, 0 passed\n  tests/test_unit.py::test_fails: assert (1 + 1) == 3\n"
+    named = "test: 0 passed, 1 failed\n  tests/test_unit.py::test_fails: assert (1 + 1) == 3\n"
     assert named in stdout
 
 
@@ -159,13 +159,13 @@ def test_the_summary_lists_a_rewritten_file_that_was_already_dirty(project: Proj
     passing_project(project).write("src/demo/shape.py", "x = 1\n")
     project.commit()
     project.write("src/demo/shape.py", "x=2\n")
-    listed = "Files modified during run (auto-fix surface, 1):\n  src/demo/shape.py"
+    listed = "Files changed during the run (1): src/demo/shape.py"
     assert listed in project.make("check").stdout
 
 
 def test_check_outside_git_says_it_cannot_list_modifications(project: Project) -> None:
     shutil.rmtree(passing_project(project).root / ".git")
-    unknown = "Files modified during run: unknown outside a git repository"
+    unknown = "Files changed during the run: unknown outside a git repository"
     assert unknown in project.make("check").stdout
 
 
@@ -394,18 +394,26 @@ def test_the_fallback_still_says_when_every_stage_passed() -> None:
     assert bare([("lint", PASSED)], "check", LOGS)[-1] == f"check passed. Logs: {LOGS}"
 
 
-def test_the_summary_admits_it_cannot_see_modifications_outside_git() -> None:
-    unknown = "Files modified during run: unknown outside a git repository"
-    assert unknown in modified_files(None, None)
+def test_the_summary_admits_it_cannot_see_modifications_outside_git(tmp_path: Path) -> None:
+    unknown = "Files changed during the run: unknown outside a git repository"
+    assert unknown in loop.changes(None, None, tmp_path, tmp_path)
 
 
 def test_the_summary_lists_a_file_a_fix_reverted() -> None:
-    assert "  src/a.py" in modified_files({"src/a.py": "one"}, {})
+    assert changed_files({"src/a.py": "one"}, {}) == ["src/a.py"]
 
 
-def test_the_summary_truncates_a_long_modified_list() -> None:
-    after = {f"src/{n}.py": "new" for n in range(12)}
-    assert "  ... (12 total)" in modified_files({}, after)
+def test_the_summary_names_a_few_changed_files_on_one_line(tmp_path: Path) -> None:
+    after = {"src/a.py": "new", "src/b.py": "new"}
+    line = "Files changed during the run (2): src/a.py, src/b.py"
+    assert line in loop.changes({}, after, tmp_path, tmp_path)
+
+
+def test_the_summary_points_at_the_full_list_of_many_changed_files(tmp_path: Path) -> None:
+    after = {f"src/{n:02}.py": "new" for n in range(12)}
+    line = "Files changed during the run (12): all of them: changed.txt"
+    assert line in loop.changes({}, after, tmp_path, tmp_path)
+    assert (tmp_path / loop.CHANGED).read_text().splitlines() == sorted(after)
 
 
 def suppression(line: int, label: str) -> Suppression:

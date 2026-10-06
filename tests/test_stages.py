@@ -21,6 +21,14 @@ from tests.support import harness_environment
 from tests.support import manifest
 
 FAILING = "def test_fails() -> None:\n    assert False\n"
+NOISY_FAILING = """import logging
+
+
+def test_charge() -> None:
+    print("balance before: 10")
+    logging.getLogger("bank").warning("card declined: limit 5")
+    assert False
+"""
 MARKED = "import pytest\n\npytestmark = pytest.mark.integration\n\n\n"
 IMPORTABLE = '\n[tool.pytest.ini_options]\npythonpath = ["src"]\n'
 
@@ -307,16 +315,23 @@ def test_coverage_measures_the_declared_source(project: Project) -> None:
     declare_layout(project)
     project.write("src/main/demo/calc.py", "def used() -> int:\n    return 1\n")
     project.write("src/test/test_calc.py", TESTS_USED)
-    result = project.make("coverage")
+    target = project.root.parent / "coverage.verdict"
+    result = project.make("coverage", environment={VERDICT_VARIABLE: str(target)})
     assert result.returncode == 0
     assert "Required test coverage of 100.0% reached" in result.stdout
+    assert read_verdict(target) == Verdict(PASSED, "1 passed, 0 failed, 100% of src/main")
 
 
 # #region Verdicts
 
 
-def ran(reports: Path, code: int, stdout: str = "") -> stage.Ran:
-    return stage.Ran(code, stdout, reports)
+def ran(reports: Path, code: int, stdout: str = "", measured: Path | None = None) -> stage.Ran:
+    return stage.Ran(code, stdout, reports, measured)
+
+
+def measured(reports: Path, percent: float, gaps: dict[str, dict[str, list[int]]]) -> None:
+    content = {"totals": {"percent_covered": percent}, "files": gaps}
+    (reports / stage.COVERAGE_REPORT).write_text(json.dumps(content))
 
 
 def recorded(reports: Path, passed: int, *failures: str) -> None:
@@ -331,7 +346,7 @@ def test_every_unit_passing_is_one_pass(tmp_path: Path) -> None:
     created.write("libs/b/tests/test_b.py", PASSING)
     target = tmp_path / "test.verdict"
     assert created.make("test", environment={VERDICT_VARIABLE: str(target)}).returncode == 0
-    assert read_verdict(target) == Verdict(PASSED, "2 units passed")
+    assert read_verdict(target) == Verdict(PASSED, "2 passed, 0 failed")
 
 
 def test_the_unit_a_stage_stopped_at_says_how_many_never_ran(tmp_path: Path) -> None:
@@ -341,7 +356,7 @@ def test_the_unit_a_stage_stopped_at_says_how_many_never_ran(tmp_path: Path) -> 
     created.make("test", environment={VERDICT_VARIABLE: str(target)})
     verdict = read_verdict(target)
     assert verdict is not None
-    assert verdict.headline == "1 failed, 0 passed; 1 unit after it not run"
+    assert verdict.headline == "0 passed, 1 failed; 1 unit after it not run"
 
 
 def absent_checker(_unit: Path | None, _harness: Path, _reports: Path) -> stage.Step:
@@ -350,7 +365,7 @@ def absent_checker(_unit: Path | None, _harness: Path, _reports: Path) -> stage.
 
 def test_a_checker_that_cannot_start_is_broken(tmp_path: Path) -> None:
     absent = stage.Stage(absent_checker, stage.judge_fix)
-    verdict = stage.perform("lint", None, absent, tmp_path, tmp_path, {})
+    verdict = stage.perform("lint", None, absent, tmp_path, tmp_path, {}).verdict
     assert verdict.outcome == BROKEN
     assert verdict.headline.startswith("could not start no-such-checker-anywhere: ")
 
@@ -374,29 +389,85 @@ def test_a_test_session_that_failed_and_recorded_nothing_is_broken(tmp_path: Pat
     )
 
 
-def test_a_clean_test_session_passes_even_without_its_report(tmp_path: Path) -> None:
-    assert stage.judge_tests(ran(tmp_path, 0), tmp_path).verdict == Verdict(PASSED)
+def test_a_clean_test_session_without_its_record_proves_no_pass(tmp_path: Path) -> None:
+    assert stage.judge_tests(ran(tmp_path, 0), tmp_path).verdict.outcome == BROKEN
+
+
+def test_a_passing_session_says_how_many_tests_passed_and_failed(tmp_path: Path) -> None:
+    recorded(tmp_path, 3)
+    assert stage.judge_tests(ran(tmp_path, 0), tmp_path).verdict.headline == "3 passed, 0 failed"
+
+
+def test_a_measured_session_says_how_much_of_which_source_its_tests_run(tmp_path: Path) -> None:
+    recorded(tmp_path, 3)
+    measured(tmp_path, 100.0, {})
+    judged = stage.judge_tests(ran(tmp_path, 0, measured=Path("libs/a/src")), tmp_path)
+    assert judged.verdict == Verdict(PASSED, "3 passed, 0 failed, 100% of libs/a/src")
+
+
+def test_a_recorded_failure_fails_whatever_pytest_exits_with(tmp_path: Path) -> None:
+    recorded(tmp_path, 2, "tests/test_a.py::test_x")
+    assert stage.judge_tests(ran(tmp_path, 0), tmp_path).verdict.headline == "2 passed, 1 failed"
+
+
+def test_a_session_cut_short_without_a_failure_proves_no_pass(tmp_path: Path) -> None:
+    recorded(tmp_path, 2)
+    assert stage.judge_tests(ran(tmp_path, 2), tmp_path).verdict.outcome == BROKEN
+
+
+def test_a_measured_session_without_its_measure_proves_no_pass(tmp_path: Path) -> None:
+    recorded(tmp_path, 2)
+    judged = stage.judge_tests(ran(tmp_path, 0, measured=Path("src")), tmp_path)
+    assert judged.verdict.outcome == BROKEN
 
 
 def test_coverage_names_a_failing_test_before_any_gap(tmp_path: Path) -> None:
     recorded(tmp_path, 2, "tests/test_a.py::test_x")
-    verdict = stage.judge_coverage(ran(tmp_path, 1), tmp_path).verdict
-    assert verdict.headline == "1 failed, 2 passed"
+    measured(tmp_path, 50.0, {"src/a.py": {"missing_lines": [7], "missing_branches": []}})
+    verdict = stage.judge_tests(ran(tmp_path, 1, measured=Path("src")), tmp_path).verdict
+    assert verdict.headline == "2 passed, 1 failed, 50% of src"
+    assert verdict.first == ["tests/test_a.py::test_x: boom"]
+
+
+def test_a_session_stopped_before_measuring_names_no_share(tmp_path: Path) -> None:
+    recorded(tmp_path, 0, "tests/test_a.py")
+    verdict = stage.judge_tests(ran(tmp_path, 2, measured=Path("src")), tmp_path).verdict
+    assert verdict.headline == "0 passed, 1 failed"
 
 
 def test_coverage_without_its_report_is_broken(tmp_path: Path) -> None:
     recorded(tmp_path, 2)
-    assert stage.judge_coverage(ran(tmp_path, 1), tmp_path).verdict.outcome == BROKEN
+    judged = stage.judge_tests(ran(tmp_path, 1, measured=Path("src")), tmp_path)
+    assert judged.verdict.outcome == BROKEN
 
 
 def test_coverage_short_of_full_never_reads_as_full(tmp_path: Path) -> None:
     recorded(tmp_path, 2)
-    gaps = {"src/a.py": {"missing_lines": [7], "missing_branches": []}}
-    measured = {"totals": {"percent_covered": 99.96}, "files": gaps}
-    (tmp_path / stage.COVERAGE_REPORT).write_text(json.dumps(measured))
-    verdict = stage.judge_coverage(ran(tmp_path, 1), tmp_path).verdict
-    assert verdict.headline == "99.9% covered; 1 file with code no test runs"
+    measured(tmp_path, 99.96, {"src/a.py": {"missing_lines": [7], "missing_branches": []}})
+    verdict = stage.judge_tests(ran(tmp_path, 1, measured=Path("src")), tmp_path).verdict
+    assert verdict.headline == "2 passed, 0 failed, 99.9% of src"
     assert verdict.first == ["src/a.py: lines 7"]
+
+
+def test_several_units_add_up_to_one_line(tmp_path: Path) -> None:
+    def unit(passed: int, source: str) -> stage.Judged:
+        tested = stage.Tested(passed, 0, stage.Share(100.0, source))
+        return stage.Judged(Verdict(PASSED, tested.headline()), tested=tested)
+
+    skipped = stage.Judged(Verdict(PASSED, "skipped coverage libs/c: no libs/c/src"))
+    verdict = stage.together([unit(3, "libs/a/src"), skipped, unit(2, "libs/b/src")])
+    assert verdict == Verdict(PASSED, "5 passed, 0 failed, 100% of 2 units")
+
+
+def test_a_failing_test_keeps_what_it_printed_and_logged(project: Project) -> None:
+    project.write("tests/test_unit.py", NOISY_FAILING)
+    target = project.root.parent / "test.verdict"
+    project.make("test", environment={VERDICT_VARIABLE: str(target)})
+    verdict = read_verdict(target)
+    assert verdict is not None
+    [section] = verdict.sections
+    assert "balance before: 10" in section.lines
+    assert "WARNING  bank:test_unit.py:6 card declined: limit 5" in section.lines
 
 
 def test_a_failure_without_a_marked_line_gives_its_last_line() -> None:

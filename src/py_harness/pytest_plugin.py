@@ -27,11 +27,11 @@ class Recorder:
 
     def pytest_collectreport(self, report: pytest.CollectReport) -> None:
         if report.failed:
-            self.add(report.nodeid, "could not be collected", report.longreprtext)
+            self.add(report.nodeid, "could not be collected", told(report))
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         if report.failed:
-            self.add(report.nodeid, cause(report.longreprtext, report.when), report.longreprtext)
+            self.add(report.nodeid, cause(report.longreprtext, report.when), told(report))
         elif report.passed and report.when == "call":
             self.passed += 1
 
@@ -42,6 +42,12 @@ class Recorder:
             "problems": self.problems,
         }
         write_whole(self.target, json.dumps(recorded))
+
+
+def told(report: pytest.CollectReport | pytest.TestReport) -> str:
+    """The failure as pytest prints it: the traceback, then what the test printed and logged."""
+    captured = [f"--- {title}\n{content.rstrip()}" for title, content in report.sections]
+    return "\n".join([report.longreprtext, *captured])
 
 
 def cause(text: str, when: str) -> str:

@@ -138,7 +138,9 @@ make ci
 ```
 
 A composed run prints one line per stage as it ends, then a block for each
-stage that did not pass, and its verdict on the last line. A stage that
+stage that did not pass, and its verdict on the last line. A test stage's line
+says how many tests passed and failed and, for `coverage`, how much of which
+source they run: `442 passed, 0 failed, 100% of src`. A stage that
 failed found something in the code: its block counts the findings per rule,
 shows the first few, and names the file holding all of them, one section per
 source file or test. A stage that broke did not finish: its checker crashed,

@@ -11,7 +11,6 @@ from typing import TypeAlias
 from py_harness.console import err
 from py_harness.console import out
 from py_harness.findings import FIRST
-from py_harness.findings import Problem
 from py_harness.findings import basedpyright_errors
 from py_harness.findings import by_file
 from py_harness.findings import counted
@@ -64,6 +63,8 @@ class Run:
     when_empty: str | None = None
     # The checker writes its report to standard output, so the stage keeps it to read.
     reads_output: bool = False
+    # The source whose share the tests run is measured, when the run measures one.
+    measures: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,31 @@ class Ran:
     code: int
     stdout: str
     reports: Path
+    measured: Path | None
+
+
+@dataclass(frozen=True)
+class Share:
+    """How much of a source the tests run: one unit's source, or several units together."""
+
+    percent: float
+    of: str
+
+
+@dataclass(frozen=True)
+class Tested:
+    passed: int
+    failed: int
+    # None when the session measured nothing, or stopped before it could.
+    share: Share | None
+
+    def headline(self) -> str:
+        counts = f"{self.passed} passed, {self.failed} failed"
+        if self.share is None:
+            return counts
+        # Floored, so a run short of full coverage never reads as 100%.
+        percent = f"{int(self.share.percent * 10) / 10:g}%"
+        return f"{counts}, {percent} of {self.share.of}"
 
 
 @dataclass(frozen=True)
@@ -93,6 +119,8 @@ class Judged:
     verdict: Verdict
     # What a person running the stage alone reads, one finding per line.
     shown: list[str] = field(default_factory=list[str])
+    # What a passing test session ran, so the sessions of several units add up to one line.
+    tested: Tested | None = None
 
 
 @dataclass(frozen=True)
@@ -150,18 +178,29 @@ def performed(name: str, stage: Stage, harness: Path, targets: list[Path | None]
         # run keeps them out of the repository and apart from any run nested in it.
         inherited = {key: value for key, value in os.environ.items() if key != CALLER_ARGUMENTS}
         environment = {**inherited, "COVERAGE_FILE": str(Path(scratch) / "coverage")}
-        passed: list[Verdict] = []
+        passed: list[Judged] = []
         for index, target in enumerate(targets):
             reports = Path(scratch) / str(index)
             reports.mkdir()
-            verdict = perform(name, target, stage, harness, reports, environment)
-            if verdict.outcome != PASSED:
+            judged = perform(name, target, stage, harness, reports, environment)
+            if judged.verdict.outcome != PASSED:
                 left = len(targets) - index - 1
-                return stopped(verdict, left) if left else verdict
-            passed.append(verdict)
+                return stopped(judged.verdict, left) if left else judged.verdict
+            passed.append(judged)
+    return together(passed)
+
+
+def together(passed: list[Judged]) -> Verdict:
+    """One target speaks for itself; several add up the tests each one ran."""
     if len(passed) == 1:
-        return passed[0]
-    return Verdict(PASSED, f"{counted(len(passed), 'unit')} passed")
+        return passed[0].verdict
+    tested = [judged.tested for judged in passed if judged.tested is not None]
+    shares = [each.share for each in tested if each.share is not None]
+    # Each unit is held to its own share, so together they reach the least of them.
+    least = min((share.percent for share in shares), default=None)
+    share = None if least is None else Share(least, counted(len(shares), "unit"))
+    total = Tested(sum(each.passed for each in tested), sum(each.failed for each in tested), share)
+    return Verdict(PASSED, total.headline())
 
 
 def stopped(verdict: Verdict, left: int) -> Verdict:
@@ -176,18 +215,18 @@ def perform(
     harness: Path,
     reports: Path,
     environment: dict[str, str],
-) -> Verdict:
+) -> Judged:
     label = name if unit is None else f"{name} {unit.as_posix()}"
     step = stage.plan(unit, harness, reports)
     out()
     if isinstance(step, Skip):
         out(f"·  skip {label} ({step.reason})")
-        return Verdict(PASSED, f"skipped {label}: {step.reason}")
+        return Judged(Verdict(PASSED, f"skipped {label}: {step.reason}"))
     out(f"→ {label}")
     if isinstance(step, Refuse):
         refused = f"{(unit or Path()).as_posix()} {step.reason}"
         err(f"{name}: {refused}")
-        return Verdict(FAILED, refused)
+        return Judged(Verdict(FAILED, refused))
     try:
         completed = subprocess.run(
             step.command,
@@ -198,14 +237,15 @@ def perform(
         )
     except OSError as error:
         err(f"{label}: could not start {step.command[0]}: {error.strerror}")
-        return Verdict(BROKEN, f"could not start {step.command[0]}: {error.strerror}")
+        return Judged(Verdict(BROKEN, f"could not start {step.command[0]}: {error.strerror}"))
     if completed.returncode == NOTHING_COLLECTED and step.when_empty is not None:
         out(f"·  skip {label} ({step.when_empty})")
-        return Verdict(PASSED, f"skipped {label}: {step.when_empty}")
-    judged = stage.judge(Ran(completed.returncode, completed.stdout or "", reports), Path.cwd())
+        return Judged(Verdict(PASSED, f"skipped {label}: {step.when_empty}"))
+    ran = Ran(completed.returncode, completed.stdout or "", reports, step.measures)
+    judged = stage.judge(ran, Path.cwd())
     for line in judged.shown:
         out(line)
-    return judged.verdict
+    return judged
 
 
 def unit_named(units: list[Path], name: str) -> Path | None:
@@ -259,38 +299,39 @@ def judge_typecheck(ran: Ran, root: Path) -> Judged:
 
 
 def judge_tests(ran: Ran, root: Path) -> Judged:
-    """Passes on a clean exit, fails on what the session recorded, and broke on anything else."""
+    """Judged on what the tests did: any test that failed, then any code no test runs.
+
+    A pass needs proof: the session's record, a session that ran to its end, and, when the
+    run measured its source, the measure. Without them what the tests did is unknown.
+    """
     recorded = failed_tests(ran.reports / TEST_REPORT, root)
-    if ran.code == CLEAN:
-        return Judged(Verdict(PASSED, f"{counted(recorded[0], 'test')} passed" if recorded else ""))
-    if recorded is None or not recorded[1]:
+    if recorded is None:
         return broke("pytest", ran)
-    return Judged(failing(*recorded))
-
-
-def judge_coverage(ran: Ran, root: Path) -> Judged:
-    """The tests first; with every test passing, a non-clean exit is code the tests never run."""
-    if ran.code == CLEAN:
-        return Judged(Verdict(PASSED))
-    recorded = failed_tests(ran.reports / TEST_REPORT, root)
-    if recorded is not None and recorded[1]:
-        return Judged(failing(*recorded))
-    measured = coverage_gaps(ran.reports / COVERAGE_REPORT, root)
-    if recorded is None or measured is None or not measured[1]:
+    passed, problems = recorded
+    share, gaps = measure(ran, root)
+    tested = Tested(passed, len(problems), share)
+    if problems:
+        first = [f"{problem.test}: {problem.message}" for problem in problems[:FIRST]]
+        sections = [Section(problem.test, problem.text.splitlines()) for problem in problems]
+        return Judged(Verdict(FAILED, tested.headline(), first=first, sections=sections))
+    if gaps:
+        first = [f"{gap.title}: {'; '.join(gap.lines)}" for gap in gaps[:FIRST]]
+        return Judged(Verdict(FAILED, tested.headline(), first=first, sections=gaps))
+    if ran.code != CLEAN or (ran.measured is not None and share is None):
         return broke("pytest", ran)
-    percent, gaps = measured
-    # Floored, so a run short of full coverage never reads as 100%.
-    covered = f"{int(percent * 10) / 10:g}%"
-    headline = f"{covered} covered; {counted(len(gaps), 'file')} with code no test runs"
-    first = [f"{gap.title}: {'; '.join(gap.lines)}" for gap in gaps[:FIRST]]
-    return Judged(Verdict(FAILED, headline, first=first, sections=gaps))
+    return Judged(Verdict(PASSED, tested.headline()), tested=tested)
 
 
-def failing(passed: int, problems: list[Problem]) -> Verdict:
-    headline = f"{len(problems)} failed, {passed} passed"
-    first = [f"{problem.test}: {problem.message}" for problem in problems[:FIRST]]
-    sections = [Section(problem.test, problem.text.splitlines()) for problem in problems]
-    return Verdict(FAILED, headline, first=first, sections=sections)
+def measure(ran: Ran, root: Path) -> tuple[Share | None, list[Section]]:
+    """The share of its source the run reached, and each file's code no test runs."""
+    if ran.measured is None:
+        return None, []
+    # A session stopped while collecting leaves no coverage report: it measured nothing.
+    gauged = coverage_gaps(ran.reports / COVERAGE_REPORT, root)
+    if gauged is None:
+        return None, []
+    percent, gaps = gauged
+    return Share(percent, ran.measured.as_posix()), gaps
 
 
 def broke(tool: str, ran: Ran) -> Judged:
@@ -359,7 +400,8 @@ def plan_coverage(unit: Path | None, harness: Path, reports: Path) -> Step:
             f"--cov-config={(harness / 'coverage.toml').as_posix()}",
             "--cov-report=term-missing:skip-covered",
             f"--cov-report=json:{(reports / COVERAGE_REPORT).as_posix()}",
-        ]
+        ],
+        measures=source,
     )
 
 
@@ -380,7 +422,7 @@ STAGES: dict[str, Stage] = {
     "typecheck": Stage(plan_typecheck, judge_typecheck, whole_repository=True, wired=True),
     "test": Stage(plan_test, judge_tests),
     "test-integration": Stage(plan_test_integration, judge_tests),
-    "coverage": Stage(plan_coverage, judge_coverage, wired=True),
+    "coverage": Stage(plan_coverage, judge_tests, wired=True),
 }
 
 

@@ -22,7 +22,7 @@ from py_harness.logs import write_record
 from py_harness.summary import Snapshot
 from py_harness.summary import bare
 from py_harness.summary import changed_files
-from py_harness.summary import modified_files
+from py_harness.summary import changed_line
 from py_harness.summary import render
 from py_harness.summary import stage_line
 from py_harness.summary import suppression_lines
@@ -54,6 +54,7 @@ STREAMED = frozenset({"ci"})
 LIMIT_VARIABLE = "PY_HARNESS_STAGE_SECONDS"
 LIMIT = 900
 LAST = "last"
+CHANGED = "changed.txt"
 STOPPED = 130
 
 
@@ -90,7 +91,7 @@ def main(argv: list[str]) -> int:
         write_record(folder, record)
         closing(record, root, folder)
         return STOPPED
-    footer = [*modified_files(before, snapshot(root)), *suppression_lines(tally(root))]
+    footer = [*changes(before, snapshot(root), folder, root), *suppression_lines(tally(root))]
     record = RunRecord(loop, started, True, done, footer)
     write_record(folder, record)
     closing(record, root, folder)
@@ -196,6 +197,17 @@ def written(folder: Path, name: str, verdict: Verdict) -> Path | None:
     path = folder / f"{name}.txt"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def changes(before: Snapshot, after: Snapshot, folder: Path, root: Path) -> list[str]:
+    """The line naming the files the run changed, with every one of them listed beside the logs."""
+    if before is None or after is None:
+        return changed_line(None, "")
+    changed = changed_files(before, after)
+    listed = folder / CHANGED
+    if changed:
+        listed.write_text("\n".join(changed) + "\n", encoding="utf-8")
+    return changed_line(changed, shown(listed, root))
 
 
 def closing(record: RunRecord, root: Path, folder: Path) -> None:
