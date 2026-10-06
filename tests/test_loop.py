@@ -99,6 +99,16 @@ def test_check_prints_one_line_per_stage_and_per_doctor_check(project: Project) 
     assert checks == [check.stem for check in discover(project.root)]
 
 
+def test_each_log_opens_with_its_stages_lines_as_the_run_printed_them(project: Project) -> None:
+    printed = passing_project(project).make("check").stdout.splitlines()
+    record = read_record(log_folder(project.root, "check"))
+    assert record is not None
+    for stage in record.stages:
+        lines = stage_lines(stage)
+        assert project.read(stage.log).splitlines()[: len(lines)] == lines
+        assert set(lines) <= set(printed)
+
+
 def test_check_keeps_each_stages_output_in_its_log(project: Project) -> None:
     result = passing_project(project).make("check")
     assert "test session starts" not in result.stdout

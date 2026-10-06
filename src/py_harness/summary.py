@@ -78,13 +78,13 @@ def block(stage: StageRecord, root: Path, told: dict[tuple[str, ...], str]) -> l
         lines.extend(f"  {line}" for line in stage.first)
         lines.append(f"  all of them: {stage.details or stage.log}")
     else:
-        lines.extend([*tail(root / stage.log), f"  all of its output: {stage.log}"])
+        lines.extend([*tail(stage, root), f"  all of its output: {stage.log}"])
     return lines
 
 
 def broken(stage: StageRecord, root: Path, told: dict[tuple[str, ...], str]) -> list[str]:
     """What the stage said last, or its own account of what broke, and where all of it is."""
-    evidence = [f"  {line}" for line in stage.first] or tail(root / stage.log)
+    evidence = [f"  {line}" for line in stage.first] or tail(stage, root)
     cause = (stage.headline, *evidence)
     if cause in told:
         same = f"{stage.name} broke the same way as {told[cause]}"
@@ -100,13 +100,15 @@ def broken(stage: StageRecord, root: Path, told: dict[tuple[str, ...], str]) -> 
     ]
 
 
-def tail(log: Path) -> list[str]:
-    """The last lines a stage printed, without the lines that only frame its run."""
+def tail(stage: StageRecord, root: Path) -> list[str]:
+    """The last lines the stage printed: below its lines the run wrote atop its log, and
+    without the lines that only frame its run."""
     try:
-        text = log.read_text(encoding="utf-8")
+        text = (root / stage.log).read_text(encoding="utf-8")
     except OSError:
         return ["  (its output could not be read)"]
-    lines = [line for line in text.splitlines() if line.strip() and not line.startswith(FRAMING)]
+    printed = text.splitlines()[len(stage_lines(stage)) :]
+    lines = [line for line in printed if line.strip() and not line.startswith(FRAMING)]
     if not lines:
         return ["  (it printed nothing)"]
     return ["  last lines of its output:", *(f"    {line}" for line in lines[-TAIL:])]

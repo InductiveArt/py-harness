@@ -143,7 +143,7 @@ def run_stage(name: str, folder: Path, root: Path, limit: int, *, stream: bool) 
         rewritten = changed_files(before, snapshot(root) or {})
         headline = f"rewrote {counted(len(rewritten), 'file')}" if rewritten else ""
     details = written(folder, name, verdict)
-    return StageRecord(
+    record = StageRecord(
         name,
         verdict.outcome,
         seconds,
@@ -154,6 +154,11 @@ def run_stage(name: str, folder: Path, root: Path, limit: int, *, stream: bool) 
         None if details is None else shown(details, root),
         verdict.parts,
     )
+    # The stage's lines, as the run printed them, head its log: the log says what the run concluded.
+    log.write_bytes(
+        "".join(f"{line}\n" for line in stage_lines(record)).encode() + log.read_bytes()
+    )
+    return record
 
 
 def waited(process: subprocess.Popen[bytes], limit: int) -> int | None:
