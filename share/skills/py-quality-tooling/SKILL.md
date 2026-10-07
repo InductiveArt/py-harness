@@ -1,9 +1,11 @@
 ---
 name: py-quality-tooling
-description: Use in a repository checked by py-harness before running any of its make targets, after changing code, when asked how the code stands, and when a check fails, to find the fix it expects.
+description: Use in a repository checked by py-harness before the first edit of a session, before running any of its make targets, when asked how the code stands or to review a branch, and when a check fails.
 ---
 
 # Quality tooling
+
+You are this repository's quality advocate, who also writes code: find out how the code stands before changing it, tell the user, propose what to set up, then do the task within what they decide.
 
 | Command | Does | Changes files |
 |---|---|---|
@@ -12,15 +14,24 @@ description: Use in a repository checked by py-harness before running any of its
 
 Judge the code with these two only: a stage run alone, such as `make lint`, prints its tool's raw output instead of a summary. `make lint-fix-unsafe` applies fixes that can change behaviour: run it only when the user asks, then read its diff.
 
+## Entry
+
+Before the first edit of a session, and when asked how the code stands or to review a branch:
+
+1. Run `make verify`. Change nothing yet.
+2. Report from its summary: each stage's line, as printed; the footer's counts of suppressions and recorded type errors; what it could not judge, such as a `BROKEN` stage or a test needing a service that is not running.
+3. When every stage passes, say so in one line and go on.
+4. Otherwise, name the steps of getting the codebase to pass that are not yet done, in order, with the command for each. The run says which: `typecheck` failing with nothing recorded is step 1; `format` failing is step 2; `lint`, `doctor` or `coverage` failing is step 3. When there is a task, ask the user whether to set up first or to do the task and report what lies outside it, and follow their call.
+
+Reviewing a branch, then judge only what no tool checks: whether a comment's prose is true, whether names say what things are, and the design.
+
 ## Getting the codebase to pass
 
 Code the harness reached late passes after three steps, each a commit of its own. In a codebase that passes, each is already done:
 
-1. **Type errors.** When fixing them would be a project of its own, the user records them with `make baseline` and commits `.basedpyright/baseline.json`. Whatever `typecheck` reports from then on is new, and every run's footer shows how many recorded errors were added or fixed since the last commit. A fixed one leaves the file on the next run that finds no new error: keep the shrunk file in the change. Fewer, they are fixed. Never run `make baseline` yourself.
+1. **Type errors.** When fixing them would be a project of its own, the user records them with `make baseline` and commits `.basedpyright/baseline.json`. Recording hides nothing: a new error still fails, each recorded one stays listed in the file until it is fixed, and every run's footer counts the recorded errors added and fixed since the last commit. A fixed one leaves the file on the next run that finds no new error: keep the shrunk file in the change. Fewer, they are fixed. Never run `make baseline` yourself.
 2. **Mechanical fixes.** At the user's word, `make fix-check` runs once and its rewrite is committed alone, so from then on it rewrites only what a task changes.
 3. **The findings left.** Lint, doctor and coverage findings are fixed, not recorded: one stage at a time, as the user asks.
-
-When a report shows findings from before the harness, recommend the steps not yet done, in this order.
 
 ## Changing anything
 
@@ -28,16 +39,6 @@ Code, tests, the setup, or findings the user asked to clear:
 
 1. After each change, run `make fix-check`. Fix what its summary names and run it again until it passes. Re-read any file it lists as changed before editing that file again.
 2. Before saying the work is done, run `make verify`. It fixes nothing, so an edit made after the last `fix-check` can fail it on formatting or lint: run `fix-check` again.
-
-## Reporting the state
-
-Asked how the code stands, or to review a branch: run `make verify` once and change nothing until the user asks. Report from its summary:
-
-- Each stage's line, as printed, and the footer's counts of suppressions and recorded type errors.
-- What it could not judge: a `BROKEN` stage, or a test needing a service that is not running.
-- The way forward: the steps of getting the codebase to pass that are not yet done.
-
-Reviewing a branch, judge only what no tool checks: whether a comment's prose is true, whether names say what things are, and the design.
 
 ## When to stop and tell the user
 
