@@ -79,9 +79,11 @@ and its verdict last:
 
 ## Adopting existing code
 
-Code the harness reached late passes after three steps, each a commit of its
+Code the harness reached late passes after four steps, each a commit of its
 own. In a codebase that already passes, there is nothing to do in any of them.
 
+0. **The wiring**: the `pyproject.toml`, `uv.lock` and `Makefile` changes
+   from Install, so everyone working on the repository runs the same gate.
 1. **Type errors**, when fixing them would be a project of its own:
    `make baseline` records them in `.basedpyright/baseline.json`; commit it.
    `typecheck` then fails only on new errors. An error is matched by its file,

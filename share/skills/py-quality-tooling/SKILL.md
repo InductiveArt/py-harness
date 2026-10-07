@@ -18,17 +18,18 @@ Judge the code with these two only: a stage run alone, such as `make lint`, prin
 
 Before the first edit of a session, and when asked how the code stands or to review a branch:
 
-1. Run `make verify`. Change nothing yet.
+1. Run `git status` and `make verify`. Change nothing yet.
 2. Report from its summary: each stage's line, as printed; the footer's counts of suppressions and recorded type errors; what it could not judge, such as a `BROKEN` stage or a test needing a service that is not running.
 3. When every stage passes, say so in one line and go on.
-4. Otherwise, name the steps of getting the codebase to pass that are not yet done, in order, with the command for each. The run says which: `typecheck` failing with nothing recorded is step 1; `format` failing is step 2; `lint`, `doctor` or `coverage` failing is step 3. When there is a task, ask the user whether to set up first or to do the task and report what lies outside it, and follow their call.
+4. Otherwise, name the steps of getting the codebase to pass that are not yet done, in order, with the command for each. They say which: harness wiring left uncommitted in `pyproject.toml`, `uv.lock` or the `Makefile` is step 0; `typecheck` failing with nothing recorded is step 1; `format` failing is step 2; `lint`, `doctor` or `coverage` failing is step 3. When there is a task, ask the user whether to set up first or to do the task and report what lies outside it, and follow their call.
 
 Reviewing a branch, then judge only what no tool checks: whether a comment's prose is true, whether names say what things are, and the design.
 
 ## Getting the codebase to pass
 
-Code the harness reached late passes after three steps, each a commit of its own. In a codebase that passes, each is already done:
+Code the harness reached late passes after four steps, each a commit of its own. In a codebase that passes, each is already done:
 
+0. **The wiring.** The `pyproject.toml`, `uv.lock` and `Makefile` changes that bring in the harness are committed, so everyone working on the repository runs the same gate.
 1. **Type errors.** When fixing them would be a project of its own, the user records them with `make baseline` and commits `.basedpyright/baseline.json`. Recording hides nothing: a new error still fails, each recorded one stays listed in the file until it is fixed, and every run's footer counts the recorded errors added and fixed since the last commit. A fixed one leaves the file on the next run that finds no new error: keep the shrunk file in the change. Fewer, they are fixed. Never run `make baseline` yourself.
 2. **Mechanical fixes.** At the user's word, `make fix-check` runs once and its rewrite is committed alone, so from then on it rewrites only what a task changes.
 3. **The findings left.** Lint, doctor and coverage findings are fixed, not recorded: one stage at a time, as the user asks.
