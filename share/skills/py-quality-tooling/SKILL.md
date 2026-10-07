@@ -10,7 +10,17 @@ description: Use in a repository checked by py-harness before running any of its
 | `make fix-check` | Fixes layout and safe lint findings, then runs lint, types, the doctor and the unit tests. | yes |
 | `make verify` | Runs lint, types, the doctor and every test, integration ones included, at full branch coverage. | no |
 
-Judge the code with these two only: a stage run alone, such as `make lint`, prints its tool's raw output instead of a summary. `make last` prints the latest summary again, running nothing. `make lint-fix-unsafe` applies fixes that can change behaviour: run it only when the user asks, then read its diff. `make baseline` belongs to the user: never run it.
+Judge the code with these two only: a stage run alone, such as `make lint`, prints its tool's raw output instead of a summary. `make lint-fix-unsafe` applies fixes that can change behaviour: run it only when the user asks, then read its diff.
+
+## Getting the codebase to pass
+
+Code the harness reached late passes after three steps, each a commit of its own. In a codebase that passes, each is already done:
+
+1. **Type errors.** When fixing them would be a project of its own, the user records them with `make baseline` and commits `.basedpyright/baseline.json`. Whatever `typecheck` reports from then on is new, and every run's footer shows how many recorded errors were added or fixed since the last commit. A fixed one leaves the file on the next run that finds no new error: keep the shrunk file in the change. Fewer, they are fixed. Never run `make baseline` yourself.
+2. **Mechanical fixes.** At the user's word, `make fix-check` runs once and its rewrite is committed alone, so from then on it rewrites only what a task changes.
+3. **The findings left.** Lint, doctor and coverage findings are fixed, not recorded: one stage at a time, as the user asks.
+
+When a report shows findings from before the harness, recommend the steps not yet done, in this order.
 
 ## Changing anything
 
@@ -23,9 +33,9 @@ Code, tests, the setup, or findings the user asked to clear:
 
 Asked how the code stands, or to review a branch: run `make verify` once and change nothing until the user asks. Report from its summary:
 
-- Each stage's line, as printed.
+- Each stage's line, as printed, and the footer's counts of suppressions and recorded type errors.
 - What it could not judge: a `BROKEN` stage, or a test needing a service that is not running.
-- The way forward. `make fix-check` fixes the formatting and the safe lint findings. Type errors no one wrote in this session can be recorded with `make baseline`, which is the user's to run. The lint and doctor findings left are fixed, not recorded.
+- The way forward: the steps of getting the codebase to pass that are not yet done.
 
 Reviewing a branch, judge only what no tool checks: whether a comment's prose is true, whether names say what things are, and the design.
 
@@ -35,8 +45,8 @@ Never work around any of these:
 
 - A `BROKEN` stage whose last lines do not point at a file you changed. Its result is unknown; it is no finding.
 - A test failing because a service it needs is not running, such as a database or a container. Never mock the service away or skip the test.
-- `fix-check` rewriting files outside the task.
-- A finding outside the task, while the codebase still holds findings from before the harness. Report it; never fix it unasked.
+- `fix-check` rewriting files outside the task: the mechanical fixes are not committed yet.
+- A finding outside the task, while findings from before the harness remain. Report it; never fix it unasked.
 - A finding you believe is wrong. A suppression is the user's decision.
 - A setting `wiring` refuses.
 - A gate holding a command or a stop. Do what its message asks; never reword the command to get it through.
@@ -93,7 +103,7 @@ Dataframes: frames in, typed values out. Operations on a frame are typed by its 
 
 ## Setup
 
-A project's settings may add, never lower: `wiring` refuses an ignore, a per-file ignore, a replaced `select`, a raised threshold, a rule or mode below the shared one, a pytest setting that changes which tests run or how they count, and any coverage setting. What a project may add:
+A project's settings may add, never lower; `wiring` names any setting it refuses. What a project may add:
 
 - A stub package for an untyped library, as a dev dependency.
 - The `integration` mark on a test that needs a service.
@@ -112,6 +122,4 @@ A suppression is the user's decision: ask before adding one, and say why. The fo
 | `cast(T, value)` | types |
 | `@pytest.mark.xfail` | tests, strict only |
 
-Anything wider fails: a file-level directive, a bare `noqa` or type ignore, `# fmt: off`, a skipped test. A repository's own tool settings may add rules, never lower one.
-
-`.basedpyright/baseline.json` holds the type errors the codebase had when it adopted the harness: whatever `typecheck` reports is new. Fixing a recorded error drops it from the file on the next run that finds no new error: keep the shrunk file in the change.
+Anything wider fails: a file-level directive, a bare `noqa` or type ignore, `# fmt: off`, a skipped test.

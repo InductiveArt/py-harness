@@ -79,17 +79,22 @@ and its verdict last:
 
 ## Adopting existing code
 
-- **Type errors** are recorded: `make baseline` writes today's to
-  `.basedpyright/baseline.json`; commit it. `typecheck` then fails only on new
-  errors, and its line counts the recorded ones. An error is matched by its
-  file, its rule and its place on its line, never by line number. A fixed
-  error leaves the file on the next run that has no new error. Every run's
-  footer counts the recorded errors with their change since the last commit
-  and lists each one added, so the file never grows or shrinks unseen.
-  `make baseline` is the user's to run.
-- **Lint and doctor findings** are fixed, not recorded. `make lint-fix-unsafe`
-  clears part of the lint; read its diff.
-- **Coverage** must reach 100% of branches before `verify` passes.
+Code the harness reached late passes after three steps, each a commit of its
+own. In a codebase that already passes, there is nothing to do in any of them.
+
+1. **Type errors**, when fixing them would be a project of its own:
+   `make baseline` records them in `.basedpyright/baseline.json`; commit it.
+   `typecheck` then fails only on new errors. An error is matched by its file,
+   its rule and its place on its line, never by line number; a fixed one
+   leaves the file on the next run that has no new error. Every run's footer
+   counts the recorded errors, with those added and fixed since the last
+   commit, and lists each one added, so the file never grows or shrinks
+   unseen.
+2. **Mechanical fixes**: `make fix-check` once, its rewrite committed alone,
+   so later runs rewrite only what a change touches.
+3. **The findings left**: lint, doctor and coverage findings are fixed, not
+   recorded, one stage at a time. `make lint-fix-unsafe` clears part of the
+   lint; read its diff.
 
 ## Configuration
 
