@@ -26,6 +26,7 @@ from py_harness.summary import changed_line
 from py_harness.summary import render
 from py_harness.summary import stage_lines
 from py_harness.summary import suppression_lines
+from py_harness.suppressions import recorded
 from py_harness.suppressions import tally
 from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
@@ -90,7 +91,8 @@ def main(argv: list[str]) -> int:
         write_record(folder, record)
         closing(record, root, folder)
         return STOPPED
-    footer = [*changes(before, snapshot(root), folder, root), *suppression_lines(tally(root))]
+    suppressed = suppression_lines(tally(root), recorded(root))
+    footer = [*changes(before, snapshot(root), folder, root), *suppressed]
     record = RunRecord(loop, started, True, done, footer)
     write_record(folder, record)
     closing(record, root, folder)

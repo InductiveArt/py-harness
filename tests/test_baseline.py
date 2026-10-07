@@ -1,9 +1,10 @@
 from pathlib import Path
 
-from py_harness.baseline import BASELINE
-from py_harness.baseline import read_baseline
-from py_harness.baseline import recorded
 from py_harness.baseline import recorded_line
+from py_harness.suppressions import BASELINE
+from py_harness.suppressions import read_baseline
+from py_harness.suppressions import recorded
+from py_harness.suppressions import recorded_errors
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
 from py_harness.verdict import VERDICT_VARIABLE
@@ -52,8 +53,11 @@ def test_a_new_error_fails_beside_the_recorded_ones(project: Project, tmp_path: 
 def test_fixing_a_recorded_error_shrinks_the_baseline(project: Project, tmp_path: Path) -> None:
     recorded_and_committed(project)
     project.write("src/demo/old.py", "COUNT: int = 0\n")
-    assert typecheck(project, tmp_path) == Verdict(PASSED, "0 recorded (-1 since the last commit)")
-    assert recorded(read_baseline(project.root)) == 0
+    assert typecheck(project, tmp_path) == Verdict(PASSED, "0 recorded")
+    assert recorded_errors(read_baseline(project.root)) == []
+    held = recorded(project.root)
+    assert held is not None
+    assert held.change == -1
 
 
 def test_code_without_a_type_error_records_nothing(project: Project) -> None:
@@ -71,7 +75,7 @@ def test_nothing_is_recorded_while_a_config_misses_the_harness(project: Project)
     assert not (project.root / BASELINE).exists()
 
 
-def test_before_the_first_commit_a_count_has_nothing_to_compare_with(tmp_path: Path) -> None:
+def test_the_count_is_every_entry_the_baseline_holds(tmp_path: Path) -> None:
     fresh = Project(tmp_path)
     fresh.git("init", "-q")
     fresh.write(BASELINE.as_posix(), '{"files": {"./a.py": [{}, {}]}}')

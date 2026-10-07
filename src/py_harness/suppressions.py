@@ -1,5 +1,6 @@
 import ast
 import io
+import json
 import re
 import subprocess
 import tokenize
@@ -8,8 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeAlias
 
+from py_harness.tables import as_list
+from py_harness.tables import as_table
 from py_harness.tree import repository_files
 from py_harness.units import IGNORE_FILE
+from py_harness.verdict import decoded
 
 NOQA = re.compile(r"#\s*noqa\b(?::\s*(?P<codes>[A-Za-z]+\d+(?:[\s,]+[A-Za-z]+\d+)*))?")
 TYPE_CHECKER_IGNORE = re.compile(
@@ -21,6 +25,8 @@ OLD_FILE = re.compile(r"^--- a/(?P<path>.+)$")
 DIFFED_FILE = re.compile(r"^\+\+\+ (?:b/(?P<path>.+)|/dev/null)$")
 HUNK = re.compile(r"^@@ -\S+ \+(?P<start>\d+)")
 EVERY_RULE = "(every rule)"
+# Where basedpyright keeps the errors it no longer reports; wiring refuses any other place.
+BASELINE = Path(".basedpyright") / "baseline.json"
 
 # Changed line numbers per file since the last commit; None marks a file whose every line is new.
 Changes: TypeAlias = dict[str, set[int] | None]
@@ -29,14 +35,19 @@ Changes: TypeAlias = dict[str, set[int] | None]
 @dataclass(frozen=True)
 class Suppression:
     path: str
-    line: int
+    # None for a recorded type error, which the baseline keeps without its line.
+    line: int | None
     label: str
     text: str
+
+    @property
+    def place(self) -> str:
+        return self.path if self.line is None else f"{self.path}:{self.line}"
 
 
 @dataclass(frozen=True)
 class Tally:
-    """The repository's bypasses, and how the working tree changed them since the last commit."""
+    """Bypasses of one kind, and how the working tree changed them since the last commit."""
 
     present: list[Suppression]
     change: int | None
@@ -166,6 +177,57 @@ def excluded_units(path: str, text: str) -> list[Suppression]:
     lines = enumerate(text.splitlines(), start=1)
     entries = ((number, line.split("#", 1)[0].strip()) for number, line in lines)
     return [Suppression(path, number, "excluded unit", entry) for number, entry in entries if entry]
+
+
+# #region Recorded type errors
+
+
+def recorded(root: Path) -> Tally | None:
+    """The type errors the baseline holds, tallied like written suppressions; None without one."""
+    text = read_baseline(root)
+    if text is None:
+        return None
+    present = recorded_errors(text)
+    if git(root, "rev-parse", "--verify", "--quiet", "HEAD") is None:
+        return Tally(present, None, None)
+    before = recorded_errors(git(root, "show", f"HEAD:{BASELINE.as_posix()}"))
+    return Tally(present, len(present) - len(before), new_entries(present, before))
+
+
+def read_baseline(root: Path) -> str | None:
+    try:
+        return (root / BASELINE).read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def recorded_errors(text: str | None) -> list[Suppression]:
+    """Each error the baseline holds, known by its file, its rule and its columns."""
+    if text is None:
+        return []
+    files = as_table(as_table(decoded(text)).get("files"))
+    return [
+        Suppression(
+            path.removeprefix("./"),
+            None,
+            f"recorded {as_table(entry).get('code')}",
+            json.dumps(as_table(entry).get("range"), sort_keys=True),
+        )
+        for path, entries in files.items()
+        for entry in as_list(entries)
+    ]
+
+
+def new_entries(present: list[Suppression], before: list[Suppression]) -> list[Suppression]:
+    """What the baseline holds beyond what it held before; equal entries count one each."""
+    left = Counter(before)
+    added: list[Suppression] = []
+    for found in present:
+        if left[found]:
+            left[found] -= 1
+        else:
+            added.append(found)
+    return added
 
 
 # #region Comparing with the last commit

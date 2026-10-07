@@ -151,15 +151,15 @@ def changed_files(before: dict[str, str], after: dict[str, str]) -> list[str]:
     return sorted(path for path in paths if before.get(path) != after.get(path))
 
 
-def suppression_lines(tally: Tally) -> list[str]:
+def suppression_lines(written: Tally, recorded: Tally | None) -> list[str]:
     """Shown on every run, passing ones included, since a suppression is how a check goes green."""
-    lines = ["", headline(tally)]
-    added = tally.added or []
+    lines = ["", headline(written)]
+    if recorded is not None:
+        lines.append(f"Recorded type errors: {len(recorded.present)}{direction(recorded)}")
+    added = [found for tally in (written, recorded) if tally for found in tally.added or []]
     if added:
         lines.append(f"Added since the last commit ({len(added)}):")
-        lines.extend(
-            f"  {found.path}:{found.line}  {found.label}" for found in added[:SUPPRESSION_LIMIT]
-        )
+        lines.extend(f"  {found.place}  {found.label}" for found in added[:SUPPRESSION_LIMIT])
     if len(added) > SUPPRESSION_LIMIT:
         lines.append(f"  ... ({len(added)} total)")
     return lines
@@ -168,11 +168,17 @@ def suppression_lines(tally: Tally) -> list[str]:
 def headline(tally: Tally) -> str:
     count = len(tally.present)
     scale = f"{count} in the repository" if count else "none in the repository"
-    if tally.change is None:
-        direction = "; the change is unknown without a commit to compare"
-    elif tally.change == 0:
-        direction = ", unchanged since the last commit"
-    else:
-        direction = f", {tally.change:+d} since the last commit"
     common = ", ".join(f"{label} x{number}" for label, number in tally.most_common(COMMON_SHOWN))
-    return f"Suppressions: {scale}{direction}" + (f" (most: {common})" if common else "")
+    return f"Suppressions: {scale}{direction(tally)}" + (f" (most: {common})" if common else "")
+
+
+def direction(tally: Tally) -> str:
+    """Additions and removals each, so a fix never hides behind an addition of the same size."""
+    if tally.change is None or tally.added is None:
+        return "; the change is unknown without a commit to compare"
+    added = len(tally.added)
+    removed = added - tally.change
+    moves = [f"{sign}{count}" for sign, count in (("+", added), ("-", removed)) if count]
+    if not moves:
+        return ", unchanged since the last commit"
+    return f", {' and '.join(moves)} since the last commit"

@@ -2,7 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from py_harness.suppressions import BASELINE
 from py_harness.suppressions import inventory
+from py_harness.suppressions import recorded
 from py_harness.suppressions import suppressions_in_text
 from py_harness.suppressions import tally
 from tests.support import Project
@@ -131,3 +133,59 @@ def test_without_a_commit_the_change_is_unknown(tmp_path: Path) -> None:
     project.git("init", "-q")
     counted = tally(project.root)
     assert (counted.change, counted.added, len(counted.present)) == (None, None, 1)
+
+
+# #region Recorded type errors
+
+
+def baseline(*codes: str) -> str:
+    """A baseline holding one error per code, each in src/app.py at the same columns."""
+    entries = ", ".join(
+        f'{{"code": "{code}", "range": {{"startColumn": 0, "endColumn": 1, "lineCount": 1}}}}'
+        for code in codes
+    )
+    return f'{{"files": {{"./src/app.py": [{entries}]}}}}'
+
+
+def test_a_recorded_error_added_since_the_last_commit_is_listed(tmp_path: Path) -> None:
+    project = repository(tmp_path)
+    project.write(BASELINE.as_posix(), baseline("reportAny"))
+    project.commit()
+    project.write(BASELINE.as_posix(), baseline("reportAny", "reportUnknownVariableType"))
+    held = recorded(project.root)
+    assert held is not None
+    added = [(found.place, found.label) for found in held.added or []]
+    assert (held.change, added) == (1, [("src/app.py", "recorded reportUnknownVariableType")])
+
+
+def test_a_fixed_recorded_error_counts_minus_one(tmp_path: Path) -> None:
+    project = repository(tmp_path)
+    project.write(BASELINE.as_posix(), baseline("reportAny", "reportAny"))
+    project.commit()
+    project.write(BASELINE.as_posix(), baseline("reportAny"))
+    held = recorded(project.root)
+    assert held is not None
+    assert (held.change, held.added, len(held.present)) == (-1, [], 1)
+
+
+def test_an_entry_equal_to_a_recorded_one_still_counts_as_added(tmp_path: Path) -> None:
+    project = repository(tmp_path)
+    project.write(BASELINE.as_posix(), baseline("reportAny"))
+    project.commit()
+    project.write(BASELINE.as_posix(), baseline("reportAny", "reportAny"))
+    held = recorded(project.root)
+    assert held is not None
+    assert [found.label for found in held.added or []] == ["recorded reportAny"]
+
+
+def test_without_a_baseline_nothing_is_recorded(tmp_path: Path) -> None:
+    assert recorded(repository(tmp_path).root) is None
+
+
+def test_without_a_commit_the_recorded_change_is_unknown(tmp_path: Path) -> None:
+    project = Project(tmp_path)
+    project.write(BASELINE.as_posix(), baseline("reportAny"))
+    project.git("init", "-q")
+    held = recorded(project.root)
+    assert held is not None
+    assert (held.change, held.added, len(held.present)) == (None, None, 1)

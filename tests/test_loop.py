@@ -456,7 +456,7 @@ def test_the_summary_counts_suppressions_with_their_change_and_most_common_rules
         suppression(2, "noqa E501"),
         suppression(3, "pyright reportAny"),
     ]
-    lines = suppression_lines(Tally(present, 1, present[2:]))
+    lines = suppression_lines(Tally(present, 1, present[2:]), None)
     common = "(most: noqa E501 x2, pyright reportAny x1)"
     headline = f"Suppressions: 3 in the repository, +1 since the last commit {common}"
     assert headline in lines
@@ -465,19 +465,48 @@ def test_the_summary_counts_suppressions_with_their_change_and_most_common_rules
 
 
 def test_the_summary_says_when_nothing_is_suppressed() -> None:
-    lines = suppression_lines(NOTHING_SUPPRESSED)
+    lines = suppression_lines(NOTHING_SUPPRESSED, None)
     assert "Suppressions: none in the repository, unchanged since the last commit" in lines
 
 
 def test_the_summary_admits_the_change_is_unknown_without_history() -> None:
-    lines = suppression_lines(Tally([suppression(1, "noqa E501")], None, None))
+    lines = suppression_lines(Tally([suppression(1, "noqa E501")], None, None), None)
     unknown = "Suppressions: 1 in the repository; the change is unknown without a commit to compare"
     assert f"{unknown} (most: noqa E501 x1)" in lines
 
 
 def test_the_summary_truncates_a_long_list_of_added_suppressions() -> None:
     added = [suppression(number, "noqa E501") for number in range(25)]
-    assert "  ... (25 total)" in suppression_lines(Tally(added, 25, added))
+    assert "  ... (25 total)" in suppression_lines(Tally(added, 25, added), None)
+
+
+def recorded_error(code: str) -> Suppression:
+    return Suppression("src/a.py", None, f"recorded {code}", "{}")
+
+
+def test_the_summary_counts_recorded_type_errors_with_their_change() -> None:
+    held = [recorded_error("reportAny"), recorded_error("reportAny")]
+    lines = suppression_lines(NOTHING_SUPPRESSED, Tally(held, -1, []))
+    assert "Recorded type errors: 2, -1 since the last commit" in lines
+    assert not any(line.startswith("Added since the last commit") for line in lines)
+
+
+def test_the_summary_lists_a_recorded_error_added_since_the_last_commit() -> None:
+    added = [recorded_error("reportAny")]
+    lines = suppression_lines(NOTHING_SUPPRESSED, Tally(added, 1, added))
+    assert "Added since the last commit (1):" in lines
+    assert "  src/a.py  recorded reportAny" in lines
+
+
+def test_a_fix_and_an_addition_of_the_same_size_are_both_told() -> None:
+    held = [recorded_error("reportAny") for _ in range(8)]
+    lines = suppression_lines(NOTHING_SUPPRESSED, Tally(held, 0, held[:4]))
+    assert "Recorded type errors: 8, +4 and -4 since the last commit" in lines
+
+
+def test_without_a_baseline_the_summary_counts_no_recorded_errors() -> None:
+    lines = suppression_lines(NOTHING_SUPPRESSED, None)
+    assert not any(line.startswith("Recorded type errors") for line in lines)
 
 
 # #region Stopping a stage

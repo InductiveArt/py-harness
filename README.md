@@ -61,7 +61,7 @@ and its verdict last:
 
 ```
   lint        failed   102 findings in 31 files (0.2s)
-  typecheck   ok       2406 recorded (-12 since the last commit) (3.8s)
+  typecheck   ok       2406 recorded (3.8s)
   test        ok       442 passed, 0 failed (8.2s)
 ```
 
@@ -83,8 +83,10 @@ and its verdict last:
   `.basedpyright/baseline.json`; commit it. `typecheck` then fails only on new
   errors, and its line counts the recorded ones. An error is matched by its
   file, its rule and its place on its line, never by line number. A fixed
-  error leaves the file on the next run that has no new error, and the file
-  grows only through `make baseline`, which is the user's to run.
+  error leaves the file on the next run that has no new error. Every run's
+  footer counts the recorded errors with their change since the last commit
+  and lists each one added, so the file never grows or shrinks unseen.
+  `make baseline` is the user's to run.
 - **Lint and doctor findings** are fixed, not recorded. `make lint-fix-unsafe`
   clears part of the lint; read its diff.
 - **Coverage** must reach 100% of branches before `verify` passes.

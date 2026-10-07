@@ -4,14 +4,11 @@ from pathlib import Path
 
 from py_harness.console import err
 from py_harness.console import out
-from py_harness.suppressions import git
-from py_harness.tables import as_list
-from py_harness.tables import as_table
-from py_harness.verdict import decoded
+from py_harness.suppressions import read_baseline
+from py_harness.suppressions import recorded
+from py_harness.suppressions import recorded_errors
 from py_harness.wiring import wiring_problems
 
-# Where basedpyright keeps the errors it no longer reports; wiring refuses any other place.
-BASELINE = Path(".basedpyright") / "baseline.json"
 # basedpyright exits 1 when it found errors, which it has just recorded; above that it broke.
 WRITTEN = (0, 1)
 
@@ -28,35 +25,19 @@ def main(argv: list[str]) -> int:
     written = subprocess.run(["basedpyright", "--writebaseline"], check=False)  # noqa: S607
     if written.returncode not in WRITTEN:
         return written.returncode
-    out(f"baseline: {recorded_line(root) or 'nothing to record, the code has no type error'}")
+    held = recorded(root)
+    if held is None:
+        out("baseline: nothing to record, the code has no type error")
+        return 0
+    change = f" ({held.change:+d} since the last commit)" if held.change else ""
+    out(f"baseline: {len(held.present)} recorded{change}")
     return 0
 
 
 def recorded_line(root: Path) -> str:
-    """How many type errors the baseline holds, and how many the change since the last commit
-    added or fixed; empty when there is no baseline."""
-    now = recorded(read_baseline(root))
-    if now is None:
-        return ""
-    if git(root, "rev-parse", "--verify", "--quiet", "HEAD") is None:
-        return f"{now} recorded"
-    change = now - (recorded(git(root, "show", f"HEAD:{BASELINE.as_posix()}")) or 0)
-    return f"{now} recorded" + (f" ({change:+d} since the last commit)" if change else "")
-
-
-def read_baseline(root: Path) -> str | None:
-    try:
-        return (root / BASELINE).read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-
-def recorded(text: str | None) -> int | None:
-    """The errors a baseline holds, or None when there is none to read."""
-    if text is None:
-        return None
-    files = as_table(as_table(decoded(text)).get("files"))
-    return sum(len(as_list(entries)) for entries in files.values())
+    """How many type errors the baseline holds; empty when there is none."""
+    text = read_baseline(root)
+    return "" if text is None else f"{len(recorded_errors(text))} recorded"
 
 
 if __name__ == "__main__":

@@ -5,32 +5,49 @@ description: Use in a repository checked by py-harness before running any of its
 
 # Quality tooling
 
-## Workflows
-
 | Command | Does | Changes files |
 |---|---|---|
 | `make fix-check` | Fixes layout and safe lint findings, then runs lint, types, the doctor and the unit tests. | yes |
 | `make verify` | Runs lint, types, the doctor and every test, integration ones included, at full branch coverage. | no |
 
-Judge the code with these two only. A stage run alone, such as `make lint`, prints its tool's raw output instead of a summary.
+Judge the code with these two only: a stage run alone, such as `make lint`, prints its tool's raw output instead of a summary. `make last` prints the latest summary again, running nothing. `make lint-fix-unsafe` applies fixes that can change behaviour: run it only when the user asks, then read its diff. `make baseline` belongs to the user: never run it.
 
-**After changing code.** Run `make fix-check`. Fix what its summary names and run it again until it passes. Before saying the work is done, run `make verify`. Since it fixes nothing, an edit made after the last `fix-check` can fail it on formatting or lint: run `fix-check` again.
+## Changing anything
 
-**Asked how the code stands.** Run `make verify`. Change nothing until the user asks, and report from its summary:
+Code, tests, the setup, or findings the user asked to clear:
+
+1. After each change, run `make fix-check`. Fix what its summary names and run it again until it passes. Re-read any file it lists as changed before editing that file again.
+2. Before saying the work is done, run `make verify`. It fixes nothing, so an edit made after the last `fix-check` can fail it on formatting or lint: run `fix-check` again.
+
+## Reporting the state
+
+Asked how the code stands, or to review a branch: run `make verify` once and change nothing until the user asks. Report from its summary:
 
 - Each stage's line, as printed.
 - What it could not judge: a `BROKEN` stage, or a test needing a service that is not running.
 - The way forward. `make fix-check` fixes the formatting and the safe lint findings. Type errors no one wrote in this session can be recorded with `make baseline`, which is the user's to run. The lint and doctor findings left are fixed, not recorded.
 
-`make last` prints the latest run's summary again, running nothing. `make lint-fix-unsafe` applies fixes that can change behaviour: run it only when the user asks, then read its diff. `make baseline` belongs to the user: never run it.
+Reviewing a branch, judge only what no tool checks: whether a comment's prose is true, whether names say what things are, and the design.
+
+## When to stop and tell the user
+
+Never work around any of these:
+
+- A `BROKEN` stage whose last lines do not point at a file you changed. Its result is unknown; it is no finding.
+- A test failing because a service it needs is not running, such as a database or a container. Never mock the service away or skip the test.
+- `fix-check` rewriting files outside the task.
+- A finding outside the task, while the codebase still holds findings from before the harness. Report it; never fix it unasked.
+- A finding you believe is wrong. A suppression is the user's decision.
+- A setting `wiring` refuses.
+- A gate holding a command or a stop. Do what its message asks; never reword the command to get it through.
 
 ## Reading a run
 
 - A run prints one line per stage, a block for each stage that did not pass, and its verdict last.
 - A failed stage found something in the code. Its block shows the first findings and names the file holding all of them, one `## <path>` section per source file or test: search the headings and read only the section you need.
-- A `BROKEN` stage did not finish: its checker crashed, its report could not be read, or it ran out of time. It is no finding. Fix it only when its last lines point at a file you changed; otherwise tell the user.
-- "Files changed during the run" lists the files the fixes rewrote. Re-read them before editing them again.
-- A test that fails because a service it needs is not running, such as a database or a container, is no code finding. Tell the user; never mock it away or skip the test.
+- A `BROKEN` stage did not finish: its checker crashed, its report could not be read, or it ran out of time.
+- "Files changed during the run" lists the files the fixes rewrote.
+- The footer counts the suppressions and the recorded type errors, with their change since the last commit, and lists each one added.
 
 ## Expected fixes
 
@@ -70,9 +87,19 @@ Dataframes: frames in, typed values out. Operations on a frame are typed by its 
 
 ## Tests and coverage
 
-- `test` runs every test not marked `integration` (`pytestmark = pytest.mark.integration`); `coverage` runs them all.
+- `fix-check` runs every test not marked `integration` (`pytestmark = pytest.mark.integration`); `verify` runs them all.
 - `verify` requires full branch coverage of the source by its own tests. `# pragma: no cover` excludes nothing; only `if TYPE_CHECKING:`, `if __name__ == "__main__":` and `@overload` are exempt. Code a test runs in a subprocess counts.
 - Each test file is imported by its path, so no test file imports another: shared test code goes in `conftest.py` fixtures.
+
+## Setup
+
+A project's settings may add, never lower: `wiring` refuses an ignore, a per-file ignore, a replaced `select`, a raised threshold, a rule or mode below the shared one, a pytest setting that changes which tests run or how they count, and any coverage setting. What a project may add:
+
+- A stub package for an untyped library, as a dev dependency.
+- The `integration` mark on a test that needs a service.
+- `source` under `[tool.py-harness]`, with pytest's `testpaths`, when the code is not in `src/` and the tests not in `tests/`.
+- Layers under `[tool.importlinter]`, which the doctor's `boundaries` rule enforces.
+- A check of its own in `.py-harness/doctor/`: a `rule-*.py` fails, a `report-*.py` informs.
 
 ## Suppressions
 
@@ -87,4 +114,4 @@ A suppression is the user's decision: ask before adding one, and say why. The fo
 
 Anything wider fails: a file-level directive, a bare `noqa` or type ignore, `# fmt: off`, a skipped test. A repository's own tool settings may add rules, never lower one.
 
-`.basedpyright/baseline.json` holds the type errors the codebase had when it adopted the harness; `typecheck` fails only on new ones, and its line says how many are recorded. Fixing a recorded error drops it from the file on the next run: keep the shrunk file in the change.
+`.basedpyright/baseline.json` holds the type errors the codebase had when it adopted the harness: whatever `typecheck` reports is new. Fixing a recorded error drops it from the file on the next run that finds no new error: keep the shrunk file in the change.
