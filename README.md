@@ -39,8 +39,8 @@ make agent   # gives the agent its rules and skills
 
 `make agent` links `.claude/rules/py-harness.md` and the `py-quality-tooling`
 and `py-commenting` skills into the installed harness, and lists them in
-`.git/info/exclude`, so no commit carries them. `check` and `ready` run it
-too. Claude Code reads them as they are; Copilot in VS Code reads them once
+`.git/info/exclude`, so no commit carries them. `fix-check` and `verify` run
+it too. Claude Code reads them as they are; Copilot in VS Code reads them once
 `chat.useClaudeMdFile` is on.
 
 To update: `uv lock --upgrade-package py-harness && uv sync`. The lockfile
@@ -49,13 +49,12 @@ moves until the project updates. `make update` upgrades every dependency.
 
 ## Use
 
-| Command | Answers | Runs |
-|---|---|---|
-| `make check` | Did I break what I just touched? | the agent links, wiring, lint and format fixes, format, lint, typecheck, doctor, unit tests |
-| `make ready` | Is this ready to commit? | install, then the same with every test at full branch coverage |
-| `make ci` | Does the code as committed pass? | install, wiring, format, lint, typecheck, doctor, coverage; never fixes code |
+| Command | Answers | Runs | Changes files |
+|---|---|---|---|
+| `make fix-check` | Did I break what I just touched? | the agent links, wiring, lint and format fixes, then format, lint, typecheck, doctor, unit tests | yes |
+| `make verify` | Does all of it pass? | install, the agent links, wiring, format, lint, typecheck, doctor, every test at full branch coverage | no |
 
-A CI server runs `uv sync --locked`, then `make ci`.
+Run `fix-check` after each change and `verify` before calling the work done.
 
 A run prints one line per stage, a block for each stage that did not pass,
 and its verdict last:
@@ -88,7 +87,7 @@ and its verdict last:
   grows only through `make baseline`, which is the user's to run.
 - **Lint and doctor findings** are fixed, not recorded. `make lint-fix-unsafe`
   clears part of the lint; read its diff.
-- **Coverage** must reach 100% of branches before `ready` passes.
+- **Coverage** must reach 100% of branches before `verify` passes.
 
 ## Configuration
 
@@ -111,8 +110,8 @@ coverage settings, since coverage always runs on the harness's.
   ```
 
 - **Integration tests** are marked `integration`
-  (`pytestmark = pytest.mark.integration`). `check` leaves them out; `ready`
-  and `ci` run them.
+  (`pytestmark = pytest.mark.integration`). `fix-check` leaves them out;
+  `verify` runs them.
 - **Boundaries**, which module may import which, go in `[tool.importlinter]`,
   and the doctor's `boundaries` rule enforces them.
 - **Own doctor checks** go in `.py-harness/doctor/`: `rule-*.py` and
@@ -127,11 +126,12 @@ coverage settings, since coverage always runs on the harness's.
 
 ## Agent gates
 
-Optional. Turn them on once `make check` passes; before that, they would send
-the agent after every existing finding.
+Optional. Turn them on once `make fix-check` passes; before that, they would
+send the agent after every existing finding.
 
-The **Stop gate**: when the agent stops with uncommitted changes and `check`
-fails, the summary goes back to it, once per stop. In `.claude/settings.json`:
+The **Stop gate**: when the agent stops with uncommitted changes and
+`fix-check` fails, the summary goes back to it, once per stop. In
+`.claude/settings.json`:
 
 ```json
 {

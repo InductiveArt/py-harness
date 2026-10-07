@@ -152,7 +152,7 @@ def test_a_file_that_holds_no_verdict_reads_as_none(tmp_path: Path) -> None:
 def test_a_run_record_reads_back_whole(tmp_path: Path) -> None:
     parts = [Part("rule-a", PASSED, "skipped; nothing to check")]
     stage = StageRecord("doctor", PASSED, 1.5, "1 passed, 0 failed", {}, [], "d.log", None, parts)
-    record = RunRecord("check", "2026-10-06T00:00:00+00:00", True, [stage], ["footer"])
+    record = RunRecord("fix-check", "2026-10-06T00:00:00+00:00", True, [stage], ["footer"])
     write_record(tmp_path, record)
     assert read_record(tmp_path) == record
 

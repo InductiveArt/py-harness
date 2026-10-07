@@ -78,8 +78,8 @@ In a longer function, one line above a block may name the step it performs, so a
 
 ## What the harness checks
 
-- `make doctor RULE=no-comment-overreach`: a comment or docstring naming what its file neither defines, imports nor quotes. A backticked, `snake_case`, `UPPER_SNAKE` or dotted word counts as a name.
-- `make lint`, `ERA001`: commented-out code.
-- `make lint`, `FIX001` to `FIX004`: `TODO`, `FIXME`, `XXX` and `HACK` markers.
+- `doctor`, `no-comment-overreach`: a comment or docstring naming what its file neither defines, imports nor quotes. A backticked, `snake_case`, `UPPER_SNAKE` or dotted word counts as a name.
+- `lint`, `ERA001`: commented-out code.
+- `lint`, `FIX001` to `FIX004`: `TODO`, `FIXME`, `XXX` and `HACK` markers.
 
 Everything else here is judgment no tool checks.

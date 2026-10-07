@@ -14,7 +14,7 @@ announce = @printf '\n→ %s\n' '$@'
 .PHONY: help units wiring install agent audit clean update \
         format format-fix lint lint-fix lint-fix-unsafe \
         typecheck typecheck-pkg baseline test test-pkg test-integration coverage \
-        check ready ci last doctor
+        fix-check verify last doctor
 
 # #region Orientation
 
@@ -50,10 +50,9 @@ help:
 	@echo "  coverage          every test, failing below full branch coverage"
 	@echo ""
 	@echo "Composed:"
-	@echo "  check         did I break what I just touched - fixes, lint, types, doctor, tests"
-	@echo "  ready         is this ready to commit - install, fixes, lint, types, doctor, coverage"
-	@echo "  ci            does the code as committed pass - the same, never fixing code"
-	@echo "  last          the newest check, ready or ci run again, from its logs, running nothing"
+	@echo "  fix-check     after a change - fixes, then lint, types, doctor, unit tests"
+	@echo "  verify        does all of it pass - lint, types, doctor, coverage; never fixes code"
+	@echo "  last          the newest fix-check or verify run again, from its logs, running nothing"
 	@echo "  doctor        structural health (RULE=<name> runs one rule)"
 
 # `units` is a target rather than an internal detail because the first
@@ -129,12 +128,10 @@ required_pkg = $(if $(PKG),$(PKG),$(error PKG=<project name> is required))
 
 # #region Composed
 
-check:
-	@$(PY).loop check
-ready:
-	@$(PY).loop ready
-ci:
-	@$(PY).loop ci
+fix-check:
+	@$(PY).loop fix-check
+verify:
+	@$(PY).loop verify
 last:
 	@$(PY).loop last
 

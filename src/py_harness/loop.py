@@ -34,23 +34,21 @@ from py_harness.verdict import VERDICT_VARIABLE
 from py_harness.verdict import Verdict
 from py_harness.verdict import read_verdict
 
-# Each loop answers one question. `check` and `ready` serve an agent at work,
-# so they fix before they judge; `ci` judges code as committed, so it never
-# fixes code and fails on what a fix would have repaired. Fixes run before
-# any check, since removing an import changes the graph the doctor reads; lint
-# fixes run before formatting, since a rewritten import may need wrapping again.
-# Every stage runs even after one fails, so a single run names every failing stage.
+# Each loop answers one question, and its name says whether it writes. `fix-check`
+# follows each change, so it fixes before it judges the change; `verify` judges all
+# of the code as it stands, so it never fixes code and fails on what a fix would have
+# repaired. Fixes run before any check, since removing an import changes the graph
+# the doctor reads; lint fixes run before formatting, since a rewritten import may
+# need wrapping again. Every stage runs even after one fails, so a single run names
+# every failing stage.
 FIXES = ("lint-fix", "format-fix")
 CHECKS = ("format", "lint", "typecheck", "doctor")
 LOOPS: dict[str, tuple[str, ...]] = {
-    "check": ("agent", "wiring", *FIXES, *CHECKS, "test"),
-    "ready": ("install", "agent", "wiring", *FIXES, *CHECKS, "coverage"),
-    "ci": ("install", "wiring", *CHECKS, "coverage"),
+    "fix-check": ("agent", "wiring", *FIXES, *CHECKS, "test"),
+    "verify": ("install", "agent", "wiring", *CHECKS, "coverage"),
 }
 # Stages that hand the run a verdict; the others are judged by their exit code alone.
 REPORTING = frozenset({*FIXES, *CHECKS, "test", "coverage"})
-# A CI server's console is the only log anyone keeps, so there each stage's output is shown.
-STREAMED = frozenset({"ci"})
 LIMIT_VARIABLE = "PY_HARNESS_STAGE_SECONDS"
 LIMIT = 900
 LAST = "last"
@@ -83,7 +81,7 @@ def main(argv: list[str]) -> int:
         for name in stages:
             now = [*done, running(name, folder, root)]
             write_record(folder, RunRecord(loop, started, False, now, []))
-            done.append(run_stage(name, folder, root, limit, stream=loop in STREAMED))
+            done.append(run_stage(name, folder, root, limit))
             for line in stage_lines(done[-1]):
                 out(line)
     except (KeyboardInterrupt, StopSignalError):
@@ -116,7 +114,7 @@ def running(name: str, folder: Path, root: Path) -> StageRecord:
     return StageRecord(name, RUNNING, 0.0, "", {}, [], log, None, [])
 
 
-def run_stage(name: str, folder: Path, root: Path, limit: int, *, stream: bool) -> StageRecord:
+def run_stage(name: str, folder: Path, root: Path, limit: int) -> StageRecord:
     """Runs one stage in its own process group, its output written straight to its log."""
     log = folder / f"{name}.log"
     # Named for this run, so a stage left over from another can never answer for this one.
@@ -134,8 +132,6 @@ def run_stage(name: str, folder: Path, root: Path, limit: int, *, stream: bool) 
         )
         code = waited(process, limit)
     seconds = time.monotonic() - started
-    if stream:
-        out(log.read_text(encoding="utf-8").rstrip("\n"))
     verdict = decided(name, code, read_verdict(handed), limit)
     handed.unlink(missing_ok=True)
     headline = verdict.headline
@@ -240,7 +236,7 @@ def last(root: Path) -> int:
         if (record := read_record(folder := log_folder(root, loop))) is not None
     ]
     if not found:
-        out("No check, ready or ci run is recorded in this clone yet.")
+        out("No fix-check or verify run is recorded in this clone yet.")
         return 0
     folder, record = max(found, key=lambda pair: pair[1].started)
     for line in render(record, root, shown(folder, root), table=True):

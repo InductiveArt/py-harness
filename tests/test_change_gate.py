@@ -67,7 +67,7 @@ def test_each_destructive_command_is_held(project: Project, command: str) -> Non
 
 
 @pytest.mark.parametrize(
-    "command", ["git restore --staged src", "git status", "ls -la", "make check"]
+    "command", ["git restore --staged src", "git status", "ls -la", "make fix-check"]
 )
 def test_a_harmless_command_passes(project: Project, command: str) -> None:
     assert hook(project.root, call("Bash", command=command)).returncode == 0

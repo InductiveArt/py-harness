@@ -39,7 +39,7 @@ from tests.support import Project
 from tests.support import harness_environment
 from tests.support import manifest
 
-LOGS = ".git/py-harness/logs/check"
+LOGS = ".git/py-harness/logs/fix-check"
 NOTHING_SUPPRESSED = Tally([], 0, [])
 FAILING = "def test_fails() -> None:\n    assert 1 + 1 == 3\n"
 LOUD = 'print("hello")\n'
@@ -84,24 +84,24 @@ def last_line(text: str) -> str:
 # #region Composed runs
 
 
-def test_check_passes_a_clean_project(project: Project) -> None:
-    result = passing_project(project).make("check")
+def test_fix_check_passes_a_clean_project(project: Project) -> None:
+    result = passing_project(project).make("fix-check")
     assert result.returncode == 0
-    assert last_line(result.stdout).startswith("check passed in ")
+    assert last_line(result.stdout).startswith("fix-check passed in ")
     assert last_line(result.stdout).endswith(f"s. Logs: {LOGS}")
 
 
-def test_check_prints_one_line_per_stage_and_per_doctor_check(project: Project) -> None:
-    stdout = passing_project(project).make("check").stdout
+def test_fix_check_prints_one_line_per_stage_and_per_doctor_check(project: Project) -> None:
+    stdout = passing_project(project).make("fix-check").stdout
     named = [line.split()[0] for line in stdout.splitlines() if re.match(r"  \S", line)]
-    assert named == list(loop.LOOPS["check"])
+    assert named == list(loop.LOOPS["fix-check"])
     checks = [line.split()[0] for line in stdout.splitlines() if re.match(r"    \S", line)]
     assert checks == [check.stem for check in discover(project.root)]
 
 
 def test_each_log_opens_with_its_stages_lines_as_the_run_printed_them(project: Project) -> None:
-    printed = passing_project(project).make("check").stdout.splitlines()
-    record = read_record(log_folder(project.root, "check"))
+    printed = passing_project(project).make("fix-check").stdout.splitlines()
+    record = read_record(log_folder(project.root, "fix-check"))
     assert record is not None
     for stage in record.stages:
         lines = stage_lines(stage)
@@ -109,58 +109,58 @@ def test_each_log_opens_with_its_stages_lines_as_the_run_printed_them(project: P
         assert set(lines) <= set(printed)
 
 
-def test_check_keeps_each_stages_output_in_its_log(project: Project) -> None:
-    result = passing_project(project).make("check")
+def test_fix_check_keeps_each_stages_output_in_its_log(project: Project) -> None:
+    result = passing_project(project).make("fix-check")
     assert "test session starts" not in result.stdout
     assert "test session starts" in project.read(f"{LOGS}/test.log")
 
 
-def test_check_fixes_before_it_checks(project: Project) -> None:
+def test_fix_check_fixes_before_it_checks(project: Project) -> None:
     passing_project(project).write("src/demo/shape.py", "x=1\n")
-    assert project.make("check").returncode == 0
+    assert project.make("fix-check").returncode == 0
 
 
-def test_check_formats_what_a_lint_fix_rewrote(project: Project) -> None:
+def test_fix_check_formats_what_a_lint_fix_rewrote(project: Project) -> None:
     passing_project(project).write("src/demo/user.py", "import os\n\n\nVALUE = 1\n")
-    assert project.make("check").returncode == 0
+    assert project.make("fix-check").returncode == 0
     assert project.read("src/demo/user.py") == "VALUE = 1\n"
 
 
 def test_a_fix_counts_the_files_it_rewrote(project: Project) -> None:
     passing_project(project).write("src/demo/shape.py", "x=1\n")
-    assert "  format-fix  ok       rewrote 1 file (" in project.make("check").stdout
+    assert "  format-fix  ok       rewrote 1 file (" in project.make("fix-check").stdout
 
 
-def test_check_shows_a_failing_stages_findings_counted_per_rule(project: Project) -> None:
+def test_fix_check_shows_a_failing_stages_findings_counted_per_rule(project: Project) -> None:
     passing_project(project).write("src/demo/loud.py", LOUD)
-    stdout = project.make("check").stdout
+    stdout = project.make("fix-check").stdout
     shown = (
         "lint: 1 finding in 1 file\n  by rule: T201 1\n  src/demo/loud.py:1:1: T201 `print` found\n"
     )
     assert shown in stdout
     assert f"  all of them: {LOGS}/lint.txt" in stdout
-    assert last_line(stdout) == f"check did not pass: failed lint. Logs: {LOGS}"
+    assert last_line(stdout) == f"fix-check did not pass: failed lint. Logs: {LOGS}"
 
 
 def test_a_findings_file_holds_a_section_per_file(project: Project) -> None:
     passing_project(project).write("src/demo/loud.py", LOUD)
-    project.make("check")
+    project.make("fix-check")
     heading = "# lint: 1 finding in 1 file\n# by rule: T201 1\n"
     section = "\n## src/demo/loud.py (1)\n1:1: T201 `print` found\n"
     assert project.read(f"{LOGS}/lint.txt") == heading + section
 
 
-def test_check_names_a_failing_test_and_its_error(project: Project) -> None:
+def test_fix_check_names_a_failing_test_and_its_error(project: Project) -> None:
     project.write("tests/test_unit.py", FAILING)
-    stdout = project.make("check").stdout
+    stdout = project.make("fix-check").stdout
     named = "test: 0 passed, 1 failed\n  tests/test_unit.py::test_fails: assert (1 + 1) == 3\n"
     assert named in stdout
 
 
-def test_check_runs_the_doctor(project: Project) -> None:
+def test_fix_check_runs_the_doctor(project: Project) -> None:
     passing_project(project).write("src/demo/a.py", "import demo.b\n\nNEIGHBOUR = demo.b\n")
     project.write("src/demo/b.py", "import demo.a\n\nNEIGHBOUR = demo.a\n")
-    stdout = project.make("check").stdout
+    stdout = project.make("fix-check").stdout
     assert "  rule-no-cycles: Import cycles (forbidden): cycle in .:" in stdout
     assert re.search(r"\n    rule-no-cycles +failed +1 finding\n", stdout)
 
@@ -176,11 +176,11 @@ def test_a_check_gets_its_own_line_under_its_stage() -> None:
     ]
 
 
-def test_check_names_every_failing_stage(project: Project) -> None:
+def test_fix_check_names_every_failing_stage(project: Project) -> None:
     project.write("src/demo/loud.py", LOUD)
     project.write("tests/test_unit.py", FAILING)
-    expected = f"check did not pass: failed lint, test. Logs: {LOGS}"
-    assert last_line(project.make("check").stdout) == expected
+    expected = f"fix-check did not pass: failed lint, test. Logs: {LOGS}"
+    assert last_line(project.make("fix-check").stdout) == expected
 
 
 def test_the_summary_lists_a_rewritten_file_that_was_already_dirty(project: Project) -> None:
@@ -188,19 +188,19 @@ def test_the_summary_lists_a_rewritten_file_that_was_already_dirty(project: Proj
     project.commit()
     project.write("src/demo/shape.py", "x=2\n")
     listed = "Files changed during the run (1): src/demo/shape.py"
-    assert listed in project.make("check").stdout
+    assert listed in project.make("fix-check").stdout
 
 
-def test_check_outside_git_says_it_cannot_list_modifications(project: Project) -> None:
+def test_fix_check_outside_git_says_it_cannot_list_modifications(project: Project) -> None:
     shutil.rmtree(passing_project(project).root / ".git")
     unknown = "Files changed during the run: unknown outside a git repository"
-    assert unknown in project.make("check").stdout
+    assert unknown in project.make("fix-check").stdout
 
 
-def test_check_outside_git_keeps_its_logs_in_a_temporary_folder(project: Project) -> None:
+def test_fix_check_outside_git_keeps_its_logs_in_a_temporary_folder(project: Project) -> None:
     shutil.rmtree(passing_project(project).root / ".git")
-    folder = log_folder(project.root, "check")
-    assert last_line(project.make("check").stdout).endswith(f"Logs: {folder.as_posix()}")
+    folder = log_folder(project.root, "fix-check")
+    assert last_line(project.make("fix-check").stdout).endswith(f"Logs: {folder.as_posix()}")
     assert (folder / "test.log").is_file()
 
 
@@ -208,24 +208,24 @@ def test_a_tracked_file_deleted_before_the_run_does_not_break_it(project: Projec
     passing_project(project).write("src/demo/gone.py", "x = 1\n")
     project.commit()
     (project.root / "src" / "demo" / "gone.py").unlink()
-    assert project.make("check").returncode == 0
+    assert project.make("fix-check").returncode == 0
 
 
 def test_a_run_clears_what_an_earlier_run_left(project: Project) -> None:
     stale = passing_project(project).write(f"{LOGS}/stale.txt", "old")
-    project.make("check")
+    project.make("fix-check")
     assert not stale.exists()
 
 
 def test_an_unknown_mode_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["loop", "nightly"]) == 2
-    assert "usage: python -m py_harness.loop check|ready|ci|last" in capsys.readouterr().err
+    assert "usage: python -m py_harness.loop fix-check|verify|last" in capsys.readouterr().err
 
 
 def test_wiring_problems_skip_the_stages_that_need_the_wiring(project: Project) -> None:
     unwired = '[project]\nname = "demo"\nversion = "0.0.0"\n'
     passing_project(project).write("pyproject.toml", unwired)
-    stdout = project.make("check").stdout
+    stdout = project.make("fix-check").stdout
     assert "  wiring      failed   (" in stdout
     skipped = (
         "  lint        skipped  not run: a tool config does not reach the harness's (see wiring)"
@@ -234,7 +234,7 @@ def test_wiring_problems_skip_the_stages_that_need_the_wiring(project: Project) 
     assert "    wiring: no ruff configuration at the project root; ruff would run" in stdout
 
 
-def test_ci_shows_each_stages_output(
+def test_a_stages_output_goes_to_its_log_never_to_the_console(
     project: Project, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     for name in ("VIRTUAL_ENV", "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "PY_HARNESS_UNITS"):
@@ -243,8 +243,9 @@ def test_ci_shows_each_stages_output(
     monkeypatch.chdir(passing_project(project).root)
     folder = project.root / LOGS
     folder.mkdir(parents=True)
-    assert run_stage("lint", folder, project.root, 60, stream=True).outcome == PASSED
-    assert "→ lint" in capsys.readouterr().out
+    assert run_stage("lint", folder, project.root, 60).outcome == PASSED
+    assert capsys.readouterr().out == ""
+    assert "→ lint" in (folder / "lint.log").read_text(encoding="utf-8")
 
 
 # #region What a run says when something breaks
@@ -253,7 +254,7 @@ def test_ci_shows_each_stages_output(
 def test_a_tool_that_cannot_read_its_config_is_broken_not_failed(project: Project) -> None:
     unreadable = manifest().replace("[tool.ruff]\n", UNREADABLE_RUFF_SETTING)
     passing_project(project).write("pyproject.toml", unreadable)
-    result = project.make("check")
+    result = project.make("fix-check")
     assert result.returncode != 0
     assert "  lint        BROKEN   ruff exited 2 (" in result.stdout
     told = "lint-fix broke: ruff exited 2.\n  Its result is unknown; this is not a finding in the"
@@ -265,7 +266,7 @@ def test_a_tool_that_cannot_read_its_config_is_broken_not_failed(project: Projec
 def test_stages_broken_by_one_cause_tell_it_once(project: Project) -> None:
     unreadable = manifest().replace("[tool.ruff]\n", UNREADABLE_RUFF_SETTING)
     passing_project(project).write("pyproject.toml", unreadable)
-    stdout = project.make("check").stdout
+    stdout = project.make("fix-check").stdout
     assert "format-fix broke the same way as lint-fix; all of its output: " in stdout
     assert stdout.count("expected a sequence") == 1
 
@@ -274,7 +275,7 @@ def test_a_crashing_doctor_check_is_broken_with_its_error(project: Project) -> N
     passing_project(project).write(
         ".py-harness/doctor/rule-boom.py", 'raise RuntimeError("boom")\n'
     )
-    stdout = project.make("check").stdout
+    stdout = project.make("fix-check").stdout
     assert re.search(r"\ndoctor broke: \d+ passed, 0 failed, 1 crashed\.\n", stdout)
     assert re.search(r"\n    rule-boom +BROKEN +crashed, exit 70\n", stdout)
     assert "  rule-boom: RuntimeError: boom\n" in stdout
@@ -283,7 +284,7 @@ def test_a_crashing_doctor_check_is_broken_with_its_error(project: Project) -> N
 def test_a_stage_past_its_limit_is_stopped_with_all_it_started(project: Project) -> None:
     marker = hanging(passing_project(project))
     limited = {LIMIT_VARIABLE: LIMIT, MARKER: str(marker)}
-    result = project.make("check", environment=limited)
+    result = project.make("fix-check", environment=limited)
     assert f"test broke: stopped after {LIMIT}s, still running." in result.stdout
     assert not alive(int(marker.read_text()))
 
@@ -291,7 +292,7 @@ def test_a_stage_past_its_limit_is_stopped_with_all_it_started(project: Project)
 def test_a_run_told_to_stop_ends_its_stage_and_says_where_it_stopped(project: Project) -> None:
     marker = hanging(passing_project(project))
     started = subprocess.Popen(
-        ["make", "-s", "check"],  # noqa: S607
+        ["make", "-s", "fix-check"],  # noqa: S607
         cwd=project.root,
         env={**harness_environment(), MARKER: str(marker)},
         stdout=subprocess.PIPE,
@@ -304,7 +305,7 @@ def test_a_run_told_to_stop_ends_its_stage_and_says_where_it_stopped(project: Pr
     os.killpg(started.pid, signal.SIGTERM)
     stdout, _ = started.communicate(timeout=60)
     assert "test: the run stopped during this stage; its output so far: " in stdout
-    assert last_line(stdout) == f"check did not pass: interrupted test. Logs: {LOGS}"
+    assert last_line(stdout) == f"fix-check did not pass: interrupted test. Logs: {LOGS}"
     assert not alive(int(marker.read_text()))
     recorded = read_record(project.root / LOGS)
     assert recorded is not None
@@ -313,7 +314,7 @@ def test_a_run_told_to_stop_ends_its_stage_and_says_where_it_stopped(project: Pr
 
 def test_make_last_draws_the_newest_run_again(project: Project) -> None:
     passing_project(project).write("src/demo/loud.py", LOUD)
-    first = project.make("check").stdout
+    first = project.make("fix-check").stdout
     again = project.make("last")
     assert again.returncode == 0
     assert "  lint        failed   1 finding in 1 file (" in again.stdout
@@ -321,7 +322,7 @@ def test_make_last_draws_the_newest_run_again(project: Project) -> None:
 
 
 def test_make_last_says_when_nothing_ran(project: Project) -> None:
-    expected = "No check, ready or ci run is recorded in this clone yet.\n"
+    expected = "No fix-check or verify run is recorded in this clone yet.\n"
     assert project.make("last").stdout == expected
 
 
@@ -363,7 +364,7 @@ def stage(
 
 
 def drawn(*stages: StageRecord, root: Path = Path(), finished: bool = True) -> str:
-    record = RunRecord("check", "2026-10-05T00:00:00+00:00", finished, list(stages), [])
+    record = RunRecord("fix-check", "2026-10-05T00:00:00+00:00", finished, list(stages), [])
     return "\n".join(render(record, root, LOGS, table=False))
 
 
@@ -393,7 +394,7 @@ def test_the_summary_admits_a_stage_that_printed_nothing(tmp_path: Path) -> None
 def test_a_stage_the_record_still_holds_as_running_was_interrupted() -> None:
     shown = drawn(stage("test", RUNNING), finished=False)
     assert "test: the run stopped during this stage; its output so far: test.log" in shown
-    assert shown.endswith(f"check did not pass: interrupted test. Logs: {LOGS}")
+    assert shown.endswith(f"fix-check did not pass: interrupted test. Logs: {LOGS}")
 
 
 def test_the_verdict_names_every_outcome_in_order(tmp_path: Path) -> None:
@@ -405,7 +406,7 @@ def test_the_verdict_names_every_outcome_in_order(tmp_path: Path) -> None:
     ]
     shown = drawn(*stages, root=tmp_path, finished=False)
     expected = "broken doctor; failed lint; skipped format; interrupted test"
-    assert shown.endswith(f"check did not pass: {expected}. Logs: {LOGS}")
+    assert shown.endswith(f"fix-check did not pass: {expected}. Logs: {LOGS}")
 
 
 def test_the_summary_falls_back_to_each_stage_and_the_logs(
@@ -415,12 +416,12 @@ def test_the_summary_falls_back_to_each_stage_and_the_logs(
         raise ValueError
 
     monkeypatch.setattr(loop, "render", failing_drawing)
-    record = RunRecord("check", "2026-10-05T00:00:00+00:00", True, [stage()], [])
-    assert summary(record, Path(), LOGS) == bare([("lint", FAILED)], "check", LOGS)
+    record = RunRecord("fix-check", "2026-10-05T00:00:00+00:00", True, [stage()], [])
+    assert summary(record, Path(), LOGS) == bare([("lint", FAILED)], "fix-check", LOGS)
 
 
 def test_the_fallback_still_says_when_every_stage_passed() -> None:
-    assert bare([("lint", PASSED)], "check", LOGS)[-1] == f"check passed. Logs: {LOGS}"
+    assert bare([("lint", PASSED)], "fix-check", LOGS)[-1] == f"fix-check passed. Logs: {LOGS}"
 
 
 def test_the_summary_admits_it_cannot_see_modifications_outside_git(tmp_path: Path) -> None:

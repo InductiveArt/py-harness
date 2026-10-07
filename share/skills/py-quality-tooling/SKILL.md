@@ -1,21 +1,28 @@
 ---
 name: py-quality-tooling
-description: Use after changing code in a repository checked by py-harness and before saying the work is done; when running its make targets; and when a check fails, to find the fix it expects.
+description: Use in a repository checked by py-harness before running any of its make targets, after changing code, when asked how the code stands, and when a check fails, to find the fix it expects.
 ---
 
 # Quality tooling
 
-## Commands
+## Workflows
 
-| Command | When |
-|---|---|
-| `make check` | After every change. Fixes layout and safe lint findings, then runs lint, types, the doctor and the unit tests. |
-| `make ready` | Before committing. The same, with every test, integration ones included, at full branch coverage. |
-| `make last` | The latest run's summary again, running nothing. |
-| `make lint`, `typecheck`, `test`, `coverage`, `doctor` | One stage alone. `make doctor RULE=<name>` runs one rule. |
-| `make lint-fix-unsafe` | Fixes that can change behaviour. Run it deliberately and read the diff. |
+| Command | Does | Changes files |
+|---|---|---|
+| `make fix-check` | Fixes layout and safe lint findings, then runs lint, types, the doctor and the unit tests. | yes |
+| `make verify` | Runs lint, types, the doctor and every test, integration ones included, at full branch coverage. | no |
 
-`make ci` belongs to the CI server: it never fixes code. `make baseline` belongs to the user: never run it. `make help` lists every target.
+Judge the code with these two only. A stage run alone, such as `make lint`, prints its tool's raw output instead of a summary.
+
+**After changing code.** Run `make fix-check`. Fix what its summary names and run it again until it passes. Before saying the work is done, run `make verify`. Since it fixes nothing, an edit made after the last `fix-check` can fail it on formatting or lint: run `fix-check` again.
+
+**Asked how the code stands.** Run `make verify`. Change nothing until the user asks, and report from its summary:
+
+- Each stage's line, as printed.
+- What it could not judge: a `BROKEN` stage, or a test needing a service that is not running.
+- The way forward. `make fix-check` fixes the formatting and the safe lint findings. Type errors no one wrote in this session can be recorded with `make baseline`, which is the user's to run. The lint and doctor findings left are fixed, not recorded.
+
+`make last` prints the latest run's summary again, running nothing. `make lint-fix-unsafe` applies fixes that can change behaviour: run it only when the user asks, then read its diff. `make baseline` belongs to the user: never run it.
 
 ## Reading a run
 
@@ -64,7 +71,7 @@ Dataframes: frames in, typed values out. Operations on a frame are typed by its 
 ## Tests and coverage
 
 - `test` runs every test not marked `integration` (`pytestmark = pytest.mark.integration`); `coverage` runs them all.
-- `ready` requires full branch coverage of the source by its own tests. `# pragma: no cover` excludes nothing; only `if TYPE_CHECKING:`, `if __name__ == "__main__":` and `@overload` are exempt. Code a test runs in a subprocess counts.
+- `verify` requires full branch coverage of the source by its own tests. `# pragma: no cover` excludes nothing; only `if TYPE_CHECKING:`, `if __name__ == "__main__":` and `@overload` are exempt. Code a test runs in a subprocess counts.
 - Each test file is imported by its path, so no test file imports another: shared test code goes in `conftest.py` fixtures.
 
 ## Suppressions

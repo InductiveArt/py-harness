@@ -104,25 +104,19 @@ def test_the_wheel_installs_its_configs_at_a_version_free_path(consumer: Project
     assert [name for name in SHARED if not (shared / name).is_file()] == []
 
 
-def test_a_consumer_passes_ready(consumer: Project) -> None:
-    result = run(["make", "-s", "ready"], consumer.root)
+def test_a_consumer_passes_verify(consumer: Project) -> None:
+    result = run(["make", "-s", "verify"], consumer.root)
     assert result.returncode == 0, result.stdout[-3000:]
-    assert "\nready passed in " in result.stdout
+    assert "\nverify passed in " in result.stdout
     assert (consumer.root / ".claude" / "rules" / "py-harness.md").is_file()
 
 
-def test_a_consumer_passes_ci(consumer: Project) -> None:
-    result = run(["make", "-s", "ci"], consumer.root)
-    assert result.returncode == 0, result.stdout[-3000:]
-    assert "\nci passed in " in result.stdout
-
-
-def test_ci_fails_on_unformatted_code_without_rewriting_it(consumer: Project) -> None:
+def test_verify_fails_on_unformatted_code_without_rewriting_it(consumer: Project) -> None:
     unformatted = consumer.write("src/consumer/shape.py", "x=1\n")
-    result = run(["make", "-s", "ci"], consumer.root)
+    result = run(["make", "-s", "verify"], consumer.root)
     written = unformatted.read_text()
     unformatted.unlink()
-    assert "ci did not pass: failed format" in result.stdout
+    assert "verify did not pass: failed format" in result.stdout
     assert written == "x=1\n"
 
 

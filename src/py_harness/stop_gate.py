@@ -42,21 +42,27 @@ def main() -> int:
 
 
 def failing(root: Path, entry: Entry) -> bool:
-    """Runs make check when anything changed; a failure keeps the agent working."""
+    """Runs make fix-check when anything changed; a failure keeps the agent working."""
     changes = snapshot(root)
     if changes is not None and not changes:
         return False
-    checked = subprocess.run(["make", "-s", "check"], capture_output=True, text=True, check=False)  # noqa: S607
+    checked = subprocess.run(
+        ["make", "-s", "fix-check"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if checked.returncode == 0:
         record(root, {**entry, "decision": "passed"})
         return False
-    folder = log_folder(root, "check")
+    folder = log_folder(root, "fix-check")
     run = read_record(folder)
     detail = "no record of the run" if run is None else verdict_line(run, shown(folder, root))
     record(root, {**entry, "decision": "held", "detail": detail})
     err(checked.stdout + checked.stderr)
     err(
-        "make check fails. Fix what it names before finishing, or tell the user why it cannot pass."
+        "make fix-check fails. "
+        "Fix what it names before finishing, or tell the user why it cannot pass."
     )
     return True
 

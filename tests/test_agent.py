@@ -79,7 +79,6 @@ def test_agent_outside_git_still_links(tmp_path: Path, monkeypatch: pytest.Monke
     assert (tmp_path / ".claude" / "rules" / "py-harness.md").is_symlink()
 
 
-def test_check_and_ready_link_the_agent_layer_and_ci_never_does() -> None:
-    assert LOOPS["check"][0] == "agent"
-    assert LOOPS["ready"][:2] == ("install", "agent")
-    assert "agent" not in LOOPS["ci"]
+def test_each_loop_links_the_agent_layer_before_it_judges() -> None:
+    assert LOOPS["fix-check"][0] == "agent"
+    assert LOOPS["verify"][:2] == ("install", "agent")
