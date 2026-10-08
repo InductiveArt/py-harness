@@ -2,20 +2,21 @@
 
 One quality gate for Python repositories worked on by agents and people:
 ruff, basedpyright, pytest with full branch coverage and structural rules
-behind three `make` commands, with the rules and skills that tell an agent how
+behind two `make` commands, with the rules and skills that tell an agent how
 to work with them. A repository points at the harness; nothing is copied into
 it.
 
 ## Install
 
-In `pyproject.toml`:
+For a repository holding one project; uv workspaces are not supported yet.
+In `pyproject.toml`, pinned to a release:
 
 ```toml
 [dependency-groups]
 dev = ["py-harness"]
 
 [tool.uv.sources]
-py-harness = { git = "https://github.com/InductiveArt/py-harness", branch = "main" }
+py-harness = { git = "https://github.com/InductiveArt/py-harness", tag = "v0.1.0" }
 
 [tool.ruff]
 extend = ".venv/share/py-harness/ruff.toml"
@@ -43,9 +44,10 @@ and `py-commenting` skills into the installed harness, and lists them in
 it too. Claude Code reads them as they are; Copilot in VS Code reads them once
 `chat.useClaudeMdFile` is on.
 
-To update: `uv lock --upgrade-package py-harness && uv sync`. The lockfile
-pins the commit a project runs, ruff and basedpyright with it, so nothing
-moves until the project updates. `make update` upgrades every dependency.
+Releases are this repository's tags. To update, set `tag` to a newer one and
+run `uv sync`. The lockfile pins the commit a project runs, ruff and
+basedpyright with it, so nothing moves until the project updates.
+`make update` upgrades every other dependency.
 
 ## Use
 
@@ -130,8 +132,6 @@ coverage settings, since coverage always runs on the harness's.
   units arrive in `PY_HARNESS_UNITS`, one path per line, and the harness's
   folder in `PY_HARNESS_DIR`.
 - **`.py-harness/ignore`** lists units no stage covers; every run says so.
-- **A uv workspace's** members are units of their own: `make units` lists
-  them, and each `-pkg` target takes `PKG=<project name>`.
 
 ## Agent gates
 
