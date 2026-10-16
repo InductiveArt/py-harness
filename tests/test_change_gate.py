@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from py_harness.audit import entries
+from py_harness.change_gate import tree
 from tests.support import QUOTE
 from tests.support import Project
 from tests.support import append
@@ -212,6 +213,21 @@ def test_the_first_gated_call_keeps_the_tree_as_the_session_found_it(project: Pr
     kept = (project.root / ".git" / "py-harness" / "starting-trees" / "s1.json").read_text()
     assert '"src/demo/__init__.py"' in kept
     assert "later.py" not in kept
+
+
+def test_the_tree_of_a_project_below_the_repository_root(tmp_path: Path) -> None:
+    created = Project(tmp_path)
+    created.write("web/app.ts", "export const x = 1;\n")
+    created.write("py/src/app.py", "x = 1\n")
+    created.git("init", "-q")
+    created.commit()
+    created.write("py/src/app.py", "x = 2\n")
+    created.write("py/src/new.py", "y = 1\n")
+    created.write("web/stray.ts", "export const y = 2;\n")
+    found = tree(tmp_path / "py")
+    assert found is not None
+    assert sorted(found) == ["src/app.py", "src/new.py"]
+    assert [state for state in found.values() if state.endswith("absent")] == []
 
 
 # #region Audit

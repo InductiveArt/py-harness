@@ -186,13 +186,23 @@ def starting_tree(root: Path, session: str) -> Path | None:
 
 
 def tree(root: Path) -> dict[str, str] | None:
-    """Each path that differs from the last commit: how it differs, and its content's digest."""
-    listed = git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
+    """Each path below the root that differs from the last commit: how it differs, and its
+    content's digest.
+
+    The `.` holds the answer to what lies below this root, which is the whole repository
+    only when the root is its own. The format names a path from the repository root
+    however deep it runs, so what leads here is taken off the front of each.
+    """
+    listed = git(
+        root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "."
+    )
     if listed is None:
         return None
+    leading = (git(root, "rev-parse", "--show-prefix") or "").strip()
     # Each record is a two-letter status, a space, then the path.
     records = [status for status in listed.split("\0") if status]
-    return {status[3:]: f"{action(status[:2])} {digest(root / status[3:])}" for status in records}
+    found = [(status[:2], status[3:].removeprefix(leading)) for status in records]
+    return {path: f"{action(code)} {digest(root / path)}" for code, path in found}
 
 
 def action(code: str) -> str:
