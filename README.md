@@ -130,9 +130,9 @@ coverage always runs on the harness's.
   `drift-*.py` fail, `report-*.py` informs. Each is a script. Exit 0 passes,
   printing `doctor: <name> OK`; exit 1 fails, printing a heading that ends in
   a colon, then one indented line per finding; any other exit is broken. The
-  units arrive in `PY_HARNESS_UNITS`, one path per line, and the harness's
+  projects arrive in `PY_HARNESS_PROJECTS`, one path per line, and the harness's
   folder in `PY_HARNESS_DIR`.
-- **`.py-harness/ignore`** lists units no stage covers; every run says so.
+- **`.py-harness/ignore`** lists projects no stage covers; every run says so.
 
 ## Agent gates
 

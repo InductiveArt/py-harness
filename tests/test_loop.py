@@ -258,7 +258,7 @@ def test_wiring_problems_skip_the_stages_that_need_the_wiring(project: Project) 
 def test_a_stages_output_goes_to_its_log_never_to_the_console(
     project: Project, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    for name in ("VIRTUAL_ENV", "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "PY_HARNESS_UNITS"):
+    for name in ("VIRTUAL_ENV", "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "PY_HARNESS_PROJECTS"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("UV_PROJECT_ENVIRONMENT", str(VENV))
     monkeypatch.chdir(passing_project(project).root)

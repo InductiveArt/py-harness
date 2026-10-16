@@ -52,6 +52,6 @@ layers = [
     "stage : doctor : summary : agent : baseline : audit : guard",
     "logs : rules",
     "findings : layout : suppressions : pytest_plugin",
-    "verdict : transcript : units : wiring",
+    "verdict : transcript : projects : wiring",
     "console : tables : tree",
 ]

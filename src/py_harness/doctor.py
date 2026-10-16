@@ -11,10 +11,10 @@ from py_harness.console import out
 from py_harness.findings import counted
 from py_harness.layout import source_packages
 from py_harness.layout import source_root
-from py_harness.units import UNITS_VARIABLE
-from py_harness.units import UnitsError
-from py_harness.units import encode_units
-from py_harness.units import resolve_units
+from py_harness.projects import PROJECTS_VARIABLE
+from py_harness.projects import ProjectsError
+from py_harness.projects import encode_projects
+from py_harness.projects import resolve_projects
 from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
@@ -50,23 +50,30 @@ def main(argv: list[str]) -> int:
     wanted = argv[2] if len(argv) > 2 else ""
     root = Path.cwd()
     try:
-        units = resolve_units(root)
-    except UnitsError as error:
-        err(f"units: {error}")
-        report(Verdict(FAILED, f"units: {error}"))
+        projects = resolve_projects(root)
+    except ProjectsError as error:
+        err(f"projects: {error}")
+        report(Verdict(FAILED, f"projects: {error}"))
         return 1
     checks = [check for check in discover(root) if matches(check_name(check), wanted)]
     if not checks:
         out(f"doctor: no check matched '{wanted}'")
         report(Verdict(FAILED, f"no check matched '{wanted}'"))
         return 1
-    for unit in units:
-        if not source_packages(unit):
-            source = source_root(unit).as_posix()
-            err(f"doctor: '{unit.as_posix()}' has no package under {source}; source rules skip it")
+    for project in projects:
+        if not source_packages(project):
+            source = source_root(project).as_posix()
+            err(
+                f"doctor: '{project.as_posix()}' has no package under {source};"
+                " source rules skip it"
+            )
     # Resolved once and handed down, so each exclusion is announced once
     # rather than once per check.
-    environment = {**os.environ, UNITS_VARIABLE: encode_units(units), HARNESS_VARIABLE: harness}
+    environment = {
+        **os.environ,
+        PROJECTS_VARIABLE: encode_projects(projects),
+        HARNESS_VARIABLE: harness,
+    }
     finished: list[Checked] = []
     previous: list[str] = []
     with tempfile.TemporaryDirectory(prefix="py-harness-doctor-") as scratch:

@@ -1,29 +1,29 @@
 from pathlib import Path
 
+from py_harness.projects import read_manifest
 from py_harness.tables import string
 from py_harness.tables import string_list
 from py_harness.tables import subtable
-from py_harness.units import read_manifest
 
 DEFAULT_SOURCE = "src"
 DEFAULT_TESTS = "tests"
 
 
-def source_root(unit: Path) -> Path:
-    """Where a unit's code lives: its `[tool.py-harness] source`, or `src`."""
-    settings = subtable(read_manifest(unit), "tool", "py-harness")
-    return unit / (string(settings, "source") or DEFAULT_SOURCE)
+def source_root(project: Path) -> Path:
+    """Where a project's code lives: its `[tool.py-harness] source`, or `src`."""
+    settings = subtable(read_manifest(project), "tool", "py-harness")
+    return project / (string(settings, "source") or DEFAULT_SOURCE)
 
 
-def source_packages(unit: Path) -> list[str]:
-    return sorted(marker.parent.name for marker in source_root(unit).glob("*/__init__.py"))
+def source_packages(project: Path) -> list[str]:
+    return sorted(marker.parent.name for marker in source_root(project).glob("*/__init__.py"))
 
 
-def suite_patterns(unit: Path) -> list[str]:
-    """Where a unit's tests live, as its own pytest configuration declares, or `tests`."""
-    settings = subtable(read_manifest(unit), "tool", "pytest", "ini_options")
+def suite_patterns(project: Path) -> list[str]:
+    """Where a project's tests live, as its own pytest configuration declares, or `tests`."""
+    settings = subtable(read_manifest(project), "tool", "pytest", "ini_options")
     return string_list(settings, "testpaths") or [DEFAULT_TESTS]
 
 
-def suite_paths(unit: Path) -> list[Path]:
-    return sorted({match for pattern in suite_patterns(unit) for match in unit.glob(pattern)})
+def suite_paths(project: Path) -> list[Path]:
+    return sorted({match for pattern in suite_patterns(project) for match in project.glob(pattern)})

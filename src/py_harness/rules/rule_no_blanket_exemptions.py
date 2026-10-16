@@ -7,7 +7,7 @@ from pathlib import Path
 from py_harness.console import out
 from py_harness.findings import at_files
 from py_harness.findings import counted
-from py_harness.units import repository_python_files
+from py_harness.projects import repository_python_files
 from py_harness.verdict import FAILED
 from py_harness.verdict import Verdict
 from py_harness.verdict import report

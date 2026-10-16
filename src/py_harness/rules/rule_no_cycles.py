@@ -11,11 +11,11 @@ import grimp
 from py_harness.console import out
 from py_harness.layout import source_packages
 from py_harness.layout import source_root
-from py_harness.units import units_in_scope
+from py_harness.projects import projects_in_scope
 
 
 def main() -> int:
-    report = [line for unit in units_in_scope(Path.cwd()) for line in unit_report(unit)]
+    report = [line for project in projects_in_scope(Path.cwd()) for line in project_report(project)]
     if not report:
         out("doctor: no-cycles OK")
         return 0
@@ -29,18 +29,18 @@ def main() -> int:
     return 1
 
 
-def unit_report(unit: Path) -> list[str]:
-    packages = source_packages(unit)
+def project_report(project: Path) -> list[str]:
+    packages = source_packages(project)
     if not packages:
         return []
-    # The unit's own source goes first on the path, so the graph is of this
+    # The project's own source goes first on the path, so the graph is of this
     # tree and never of an installed copy.
-    sys.path.insert(0, str(source_root(unit).resolve()))
+    sys.path.insert(0, str(source_root(project).resolve()))
     graph = grimp.build_graph(*packages, exclude_type_checking_imports=True, cache_dir=None)
     edges = {module: graph.find_modules_directly_imported_by(module) for module in graph.modules}
     lines: list[str] = []
     for component in ComponentSearch(edges).cycles():
-        lines.append(f"cycle in {unit.as_posix()}:")
+        lines.append(f"cycle in {project.as_posix()}:")
         for importer in component:
             for imported in sorted(edges[importer] & set(component)):
                 details = graph.get_import_details(importer=importer, imported=imported)

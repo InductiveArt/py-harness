@@ -42,12 +42,12 @@ No `Args:`, `Returns:` or `Parameters` sections: the signature says it. A leadin
 - **Package.** `__init__.py` stays empty: a symbol is imported from the module that defines it.
 - **Class.** A docstring only when public-facing: a one-line summary, expanded only with what a consumer needs to use it correctly.
 - **Function.** None by default. A dense dispatch, such as a `match` on a discriminant, gets one line; its cases are not narrated.
-- **Attribute or constant.** None by default; one line when name and type leave the why unclear: a unit, an invariant, a constraint.
+- **Attribute or constant.** None by default; one line when name and type leave the why unclear: a project, an invariant, a constraint.
 - **Inline.** Rare: one line directly above the statement, stating a non-obvious constraint, an ordering requirement, or a workaround and its cause.
 
 ## Library code never names its consumer
 
-A comment in library code describes the unit, never who calls it or why a caller needs it:
+A comment in library code describes the project, never who calls it or why a caller needs it:
 
 ```python
 # Leaks the layer above.
@@ -55,7 +55,7 @@ def validate(token: str) -> None:
     """Validates the token before the auth middleware reads the session."""
 
 
-# Describes the unit only.
+# Describes the project only.
 def validate(token: str) -> None:
     """Validates the token.
 

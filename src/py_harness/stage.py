@@ -23,12 +23,12 @@ from py_harness.findings import unformatted
 from py_harness.layout import source_root
 from py_harness.layout import suite_paths
 from py_harness.layout import suite_patterns
+from py_harness.projects import ProjectsError
+from py_harness.projects import normalized_name
+from py_harness.projects import project_name
+from py_harness.projects import resolve_projects
 from py_harness.pytest_plugin import INTEGRATION
 from py_harness.pytest_plugin import REPORT_VARIABLE
-from py_harness.units import UnitsError
-from py_harness.units import normalized_name
-from py_harness.units import project_name
-from py_harness.units import resolve_units
 from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
@@ -94,7 +94,7 @@ class Ran:
 
 @dataclass(frozen=True)
 class Share:
-    """How much of a source the tests run: one unit's source, or several units together."""
+    """How much of a source the tests run: one project's source, or several projects together."""
 
     percent: float
     of: str
@@ -121,13 +121,13 @@ class Judged:
     verdict: Verdict
     # What a person running the stage alone reads, one finding per line.
     shown: list[str] = field(default_factory=list[str])
-    # What a passing test session ran, so the sessions of several units add up to one line.
+    # What a passing test session ran, so the sessions of several projects add up to one line.
     tested: Tested | None = None
 
 
 @dataclass(frozen=True)
 class Stage:
-    # Plans the run of one unit, or of the whole repository when the unit is None.
+    # Plans the run of one project, or of the whole repository when the project is None.
     plan: Callable[[Path | None, Path, Path], Step]
     judge: Callable[[Ran, Path], Judged]
     whole_repository: bool = False
@@ -150,9 +150,9 @@ def main(argv: list[str]) -> int:
     package = argv[3] if len(argv) > 3 else None
     try:
         targets = chosen(stage, package, root)
-    except UnitsError as error:
-        err(f"units: {error}")
-        report(Verdict(FAILED, f"units: {error}"))
+    except ProjectsError as error:
+        err(f"projects: {error}")
+        report(Verdict(FAILED, f"projects: {error}"))
         return 1
     if targets is None:
         report(Verdict(FAILED, f"unknown package: {package}"))
@@ -163,14 +163,14 @@ def main(argv: list[str]) -> int:
 
 
 def chosen(stage: Stage, package: str | None, root: Path) -> list[Path | None] | None:
-    """The whole repository once, or each unit, or the one unit named; None when none is."""
+    """The whole repository once, or each project, or the one project named; None when none is."""
     if stage.whole_repository and package is None:
         return [None]
-    units = resolve_units(root)
+    projects = resolve_projects(root)
     if package is None:
-        return list(units)
-    unit = unit_named(units, package)
-    return None if unit is None else [unit]
+        return list(projects)
+    project = project_named(projects, package)
+    return None if project is None else [project]
 
 
 def performed(name: str, stage: Stage, harness: Path, targets: list[Path | None]) -> Verdict:
@@ -198,35 +198,35 @@ def together(passed: list[Judged]) -> Verdict:
         return passed[0].verdict
     tested = [judged.tested for judged in passed if judged.tested is not None]
     shares = [each.share for each in tested if each.share is not None]
-    # Each unit is held to its own share, so together they reach the least of them.
+    # Each project is held to its own share, so together they reach the least of them.
     least = min((share.percent for share in shares), default=None)
-    share = None if least is None else Share(least, counted(len(shares), "unit"))
+    share = None if least is None else Share(least, counted(len(shares), "project"))
     total = Tested(sum(each.passed for each in tested), sum(each.failed for each in tested), share)
     return Verdict(PASSED, total.headline())
 
 
 def stopped(verdict: Verdict, left: int) -> Verdict:
-    headline = f"{verdict.headline}; {counted(left, 'unit')} after it not run"
+    headline = f"{verdict.headline}; {counted(left, 'project')} after it not run"
     return replace(verdict, headline=headline)
 
 
 def perform(
     name: str,
-    unit: Path | None,
+    project: Path | None,
     stage: Stage,
     harness: Path,
     reports: Path,
     environment: dict[str, str],
 ) -> Judged:
-    label = name if unit is None else f"{name} {unit.as_posix()}"
-    step = stage.plan(unit, harness, reports)
+    label = name if project is None else f"{name} {project.as_posix()}"
+    step = stage.plan(project, harness, reports)
     out()
     if isinstance(step, Skip):
         out(f"·  skip {label} ({step.reason})")
         return Judged(Verdict(PASSED, f"skipped {label}: {step.reason}"))
     out(f"→ {label}")
     if isinstance(step, Refuse):
-        refused = f"{(unit or Path()).as_posix()} {step.reason}"
+        refused = f"{(project or Path()).as_posix()} {step.reason}"
         err(f"{name}: {refused}")
         return Judged(Verdict(FAILED, refused))
     try:
@@ -250,14 +250,14 @@ def perform(
     return judged
 
 
-def unit_named(units: list[Path], name: str) -> Path | None:
-    for unit in units:
-        if project_name(unit) == normalized_name(name):
-            return unit
+def project_named(projects: list[Path], name: str) -> Path | None:
+    for project in projects:
+        if project_name(project) == normalized_name(name):
+            return project
     out(f"unknown package: {name}")
     out("available:")
-    for unit in units:
-        out(f"  {project_name(unit)}  ({unit.as_posix()})")
+    for project in projects:
+        out(f"  {project_name(project)}  ({project.as_posix()})")
     return None
 
 
@@ -348,50 +348,50 @@ def broke(tool: str, ran: Ran) -> Judged:
 # #region Plans
 
 
-def plan_format_fix(_unit: Path | None, _harness: Path, _reports: Path) -> Step:
+def plan_format_fix(_project: Path | None, _harness: Path, _reports: Path) -> Step:
     return Run(["ruff", "format", "."])
 
 
-def plan_lint_fix(_unit: Path | None, _harness: Path, _reports: Path) -> Step:
+def plan_lint_fix(_project: Path | None, _harness: Path, _reports: Path) -> Step:
     return Run(["ruff", "check", "--fix-only", "."])
 
 
-def plan_lint_fix_unsafe(_unit: Path | None, _harness: Path, _reports: Path) -> Step:
+def plan_lint_fix_unsafe(_project: Path | None, _harness: Path, _reports: Path) -> Step:
     return Run(["ruff", "check", "--fix-only", "--unsafe-fixes", "."])
 
 
-def plan_format(_unit: Path | None, _harness: Path, _reports: Path) -> Step:
+def plan_format(_project: Path | None, _harness: Path, _reports: Path) -> Step:
     return Run(["ruff", "format", "--check", "--output-format", "json", "."], reads_output=True)
 
 
-def plan_lint(_unit: Path | None, _harness: Path, _reports: Path) -> Step:
+def plan_lint(_project: Path | None, _harness: Path, _reports: Path) -> Step:
     return Run(["ruff", "check", "--output-format", "json", "."], reads_output=True)
 
 
-def plan_typecheck(unit: Path | None, _harness: Path, _reports: Path) -> Step:
-    within = [] if unit is None else [unit.as_posix()]
+def plan_typecheck(project: Path | None, _harness: Path, _reports: Path) -> Step:
+    within = [] if project is None else [project.as_posix()]
     return Run(["basedpyright", "--outputjson", *within], reads_output=True)
 
 
-def plan_test(unit: Path | None, _harness: Path, _reports: Path) -> Step:
-    return plan_suite(unit, ["-m", f"not {INTEGRATION}"], f"every test is marked {INTEGRATION}")
+def plan_test(project: Path | None, _harness: Path, _reports: Path) -> Step:
+    return plan_suite(project, ["-m", f"not {INTEGRATION}"], f"every test is marked {INTEGRATION}")
 
 
-def plan_test_integration(unit: Path | None, _harness: Path, _reports: Path) -> Step:
-    return plan_suite(unit, ["-m", INTEGRATION], f"no test is marked {INTEGRATION}")
+def plan_test_integration(project: Path | None, _harness: Path, _reports: Path) -> Step:
+    return plan_suite(project, ["-m", INTEGRATION], f"no test is marked {INTEGRATION}")
 
 
-def plan_suite(unit: Path | None, selection: list[str], when_empty: str) -> Step:
-    place = unit or Path()
+def plan_suite(project: Path | None, selection: list[str], when_empty: str) -> Step:
+    place = project or Path()
     suite = suite_paths(place)
     if not suite:
         return Skip(nothing_at(place))
     return Run([*PYTEST, *posix(suite), *selection], when_empty=when_empty)
 
 
-def plan_coverage(unit: Path | None, harness: Path, reports: Path) -> Step:
-    """Every test of the unit, measured against the unit's own source only."""
-    place = unit or Path()
+def plan_coverage(project: Path | None, harness: Path, reports: Path) -> Step:
+    """Every test of the project, measured against the project's own source only."""
+    place = project or Path()
     source, suite = source_root(place), suite_paths(place)
     if not source.is_dir():
         return Skip(f"no {source.as_posix()}")
@@ -410,8 +410,8 @@ def plan_coverage(unit: Path | None, harness: Path, reports: Path) -> Step:
     )
 
 
-def nothing_at(unit: Path) -> str:
-    return f"no tests at {', '.join(suite_patterns(unit))}"
+def nothing_at(project: Path) -> str:
+    return f"no tests at {', '.join(suite_patterns(project))}"
 
 
 def posix(paths: list[Path]) -> list[str]:

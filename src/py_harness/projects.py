@@ -13,28 +13,28 @@ from py_harness.tables import subtable
 from py_harness.tree import repository_files
 
 IGNORE_FILE = Path(".py-harness") / "ignore"
-UNITS_VARIABLE = "PY_HARNESS_UNITS"
+PROJECTS_VARIABLE = "PY_HARNESS_PROJECTS"
 
 
-class UnitsError(Exception):
+class ProjectsError(Exception):
     pass
 
 
 def main() -> int:
     try:
-        units = resolve_units(Path.cwd())
-    except UnitsError as error:
-        err(f"units: {error}")
+        projects = resolve_projects(Path.cwd())
+    except ProjectsError as error:
+        err(f"projects: {error}")
         return 1
-    for unit in units:
-        out(unit.as_posix())
+    for project in projects:
+        out(project.as_posix())
     return 0
 
 
-def resolve_units(root: Path) -> list[Path]:
+def resolve_projects(root: Path) -> list[Path]:
     """Workspace members in declaration order, then the root when it is a project.
 
-    Raises UnitsError rather than answer with no unit, since a caller handed an
+    Raises ProjectsError rather than answer with no project, since a caller handed an
     empty list would iterate nothing and report success having done no work.
     """
     manifest = read_manifest(root)
@@ -42,36 +42,38 @@ def resolve_units(root: Path) -> list[Path]:
     if "project" in manifest:
         declared.append(Path())
     if not declared:
-        raise UnitsError("pyproject.toml declares no [project] and no member with a pyproject.toml")
+        raise ProjectsError(
+            "pyproject.toml declares no [project] and no member with a pyproject.toml"
+        )
     ignored = ignored_paths(root)
     kept: list[Path] = []
-    for unit in declared:
-        if unit.as_posix() in ignored:
+    for project in declared:
+        if project.as_posix() in ignored:
             # A skip nobody sees is indistinguishable from coverage.
-            err(f"units: '{unit.as_posix()}' excluded by {IGNORE_FILE}")
+            err(f"projects: '{project.as_posix()}' excluded by {IGNORE_FILE}")
         else:
-            kept.append(unit)
+            kept.append(project)
     if not kept:
-        raise UnitsError(
-            f"every unit is excluded by {IGNORE_FILE}; every stage would pass without running"
+        raise ProjectsError(
+            f"every project is excluded by {IGNORE_FILE}; every stage would pass without running"
         )
     return kept
 
 
-def units_in_scope(root: Path) -> list[Path]:
-    """The units a parent process resolved, so their exclusions are announced once."""
-    handed_down = os.environ.get(UNITS_VARIABLE)
+def projects_in_scope(root: Path) -> list[Path]:
+    """The projects a parent process resolved, so their exclusions are announced once."""
+    handed_down = os.environ.get(PROJECTS_VARIABLE)
     if handed_down is None:
-        return resolve_units(root)
+        return resolve_projects(root)
     return [Path(line) for line in handed_down.splitlines()]
 
 
-def encode_units(units: list[Path]) -> str:
-    return "\n".join(unit.as_posix() for unit in units)
+def encode_projects(projects: list[Path]) -> str:
+    return "\n".join(project.as_posix() for project in projects)
 
 
-def project_name(unit: Path) -> str:
-    return normalized_name(string(subtable(read_manifest(unit), "project"), "name") or "")
+def project_name(project: Path) -> str:
+    return normalized_name(string(subtable(read_manifest(project), "project"), "name") or "")
 
 
 def normalized_name(name: str) -> str:
@@ -81,7 +83,7 @@ def normalized_name(name: str) -> str:
 def read_manifest(directory: Path) -> Table:
     path = directory / "pyproject.toml"
     if not path.is_file():
-        raise UnitsError(f"no pyproject.toml at {directory.resolve()}; nothing can be resolved")
+        raise ProjectsError(f"no pyproject.toml at {directory.resolve()}; nothing can be resolved")
     return read_table(path)
 
 
@@ -94,7 +96,9 @@ def workspace_members(root: Path, manifest: Table) -> list[Path]:
     for pattern in string_list(workspace, "members"):
         found = [path for path in expand(root, pattern) if path not in excluded]
         if not found:
-            err(f"units: workspace member '{pattern}' matches no directory with a pyproject.toml")
+            err(
+                f"projects: workspace member '{pattern}' matches no directory with a pyproject.toml"
+            )
         members.extend(found)
     return members
 
@@ -105,17 +109,17 @@ def expand(root: Path, pattern: str) -> list[Path]:
 
 
 def repository_python_files(root: Path) -> list[Path]:
-    """Every Python file below the root, except those of a unit the ignore file lists."""
+    """Every Python file below the root, except those of a project the ignore file lists."""
     ignored = {Path(entry) for entry in ignored_paths(root)}
-    units = [*units_in_scope(root), *ignored]
+    projects = [*projects_in_scope(root), *ignored]
     files = repository_files(root, lambda name: name.endswith(".py"))
-    return [path for path in files if owner(path, units) not in ignored]
+    return [path for path in files if owner(path, projects) not in ignored]
 
 
-def owner(path: Path, units: list[Path]) -> Path | None:
-    """The deepest unit holding the file, so a member's files never belong to the root."""
-    holding = [unit for unit in units if path.is_relative_to(unit)]
-    return max(holding, key=lambda unit: len(unit.parts), default=None)
+def owner(path: Path, projects: list[Path]) -> Path | None:
+    """The deepest project holding the file, so a member's files never belong to the root."""
+    holding = [project for project in projects if path.is_relative_to(project)]
+    return max(holding, key=lambda project: len(project.parts), default=None)
 
 
 def ignored_paths(root: Path) -> set[str]:

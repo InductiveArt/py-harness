@@ -72,7 +72,7 @@ def test_test_files_may_share_a_name_in_different_folders(project: Project) -> N
     assert "2 passed" in result.stdout
 
 
-def test_each_units_line_starts_a_paragraph(project: Project) -> None:
+def test_each_projects_line_starts_a_paragraph(project: Project) -> None:
     project.write("tests/test_unit.py", PASSING)
     assert project.make("test").stdout.startswith("\n→ test .\n")
 
@@ -84,13 +84,13 @@ def test_test_fails_on_a_failing_test(project: Project) -> None:
     assert "FAILED tests/test_unit.py::test_fails" in result.stdout
 
 
-def test_test_skips_a_unit_without_tests_and_says_so(project: Project) -> None:
+def test_test_skips_a_project_without_tests_and_says_so(project: Project) -> None:
     result = project.make("test")
     assert result.returncode == 0
     assert "·  skip test . (no tests at tests)" in result.stdout
 
 
-def test_test_stops_at_the_first_failing_unit(tmp_path: Path) -> None:
+def test_test_stops_at_the_first_failing_project(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path, "libs/a", "libs/b")
     created.write("libs/a/tests/test_a.py", FAILING)
     created.write("libs/b/tests/test_b.py", PASSING)
@@ -126,11 +126,11 @@ def test_the_callers_pytest_arguments_are_dropped(project: Project) -> None:
     assert project.make("test", environment=deselecting).returncode != 0
 
 
-def test_a_stage_reports_units_it_cannot_resolve(tmp_path: Path) -> None:
+def test_a_stage_reports_projects_it_cannot_resolve(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path)
     result = created.make("test")
     assert result.returncode != 0
-    assert "units: pyproject.toml declares no [project]" in result.stderr
+    assert "projects: pyproject.toml declares no [project]" in result.stderr
 
 
 def test_an_unknown_stage_is_refused(capsys: pytest.CaptureFixture[str]) -> None:
@@ -164,41 +164,41 @@ def test_test_passes_when_every_test_is_marked_integration(project: Project) -> 
     assert "·  skip test . (every test is marked integration)" in result.stdout
 
 
-# #region One unit
+# #region One project
 
 
-def test_test_pkg_runs_only_the_named_unit(tmp_path: Path) -> None:
+def test_test_pkg_runs_only_the_named_project(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path, "libs/a", "libs/b")
     created.write("libs/a/tests/test_a.py", FAILING)
     created.write("libs/b/tests/test_b.py", PASSING)
-    result = created.make("test-pkg", "PKG=b")
+    result = created.make("test-project", "PROJECT=b")
     assert result.returncode == 0
     assert "→ test libs/a" not in result.stdout
 
 
-def test_a_unit_is_found_by_its_normalized_name(tmp_path: Path) -> None:
+def test_a_project_is_found_by_its_normalized_name(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path, "libs/lib-b")
     created.write("libs/lib-b/tests/test_b.py", PASSING)
-    assert "→ test libs/lib-b" in created.make("test-pkg", "PKG=Lib_B").stdout
+    assert "→ test libs/lib-b" in created.make("test-project", "PROJECT=Lib_B").stdout
 
 
 def test_a_pkg_target_requires_pkg(project: Project) -> None:
-    result = project.make("test-pkg")
+    result = project.make("test-project")
     assert result.returncode != 0
-    assert "PKG=<project name> is required" in result.stderr
+    assert "PROJECT=<project name> is required" in result.stderr
 
 
 def test_an_unknown_package_lists_the_available_ones(project: Project) -> None:
-    result = project.make("test-pkg", "PKG=nope")
+    result = project.make("test-project", "PROJECT=nope")
     assert result.returncode != 0
     assert "unknown package: nope\navailable:\n  demo  (.)" in result.stdout
 
 
-def test_typecheck_pkg_checks_only_the_named_unit(tmp_path: Path) -> None:
+def test_typecheck_pkg_checks_only_the_named_project(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path, "libs/a", "libs/b")
     created.write("libs/a/src/a/broken.py", "def f(x):\n    return x\n")
-    assert created.make("typecheck-pkg", "PKG=b").returncode == 0
-    assert created.make("typecheck-pkg", "PKG=a").returncode != 0
+    assert created.make("typecheck-project", "PROJECT=b").returncode == 0
+    assert created.make("typecheck-project", "PROJECT=a").returncode != 0
 
 
 # #region Coverage
@@ -280,13 +280,13 @@ def test_coverage_leaves_no_data_file_in_the_repository(project: Project) -> Non
     assert sorted(path.name for path in project.root.glob(".coverage*")) == []
 
 
-def test_coverage_refuses_a_unit_with_source_and_no_tests(project: Project) -> None:
+def test_coverage_refuses_a_project_with_source_and_no_tests(project: Project) -> None:
     result = project.make("coverage")
     assert result.returncode != 0
     assert "coverage: . has src and no tests at tests" in result.stderr
 
 
-def test_coverage_skips_a_unit_without_source(project: Project) -> None:
+def test_coverage_skips_a_project_without_source(project: Project) -> None:
     (project.root / "src" / "demo" / "__init__.py").unlink()
     (project.root / "src" / "demo").rmdir()
     (project.root / "src").rmdir()
@@ -340,7 +340,7 @@ def recorded(reports: Path, passed: int, *failures: str) -> None:
     (reports / stage.TEST_REPORT).write_text(json.dumps(content))
 
 
-def test_every_unit_passing_is_one_pass(tmp_path: Path) -> None:
+def test_every_project_passing_is_one_pass(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path / "repo", "libs/a", "libs/b")
     created.write("libs/a/tests/test_a.py", PASSING)
     created.write("libs/b/tests/test_b.py", PASSING)
@@ -349,17 +349,17 @@ def test_every_unit_passing_is_one_pass(tmp_path: Path) -> None:
     assert read_verdict(target) == Verdict(PASSED, "2 passed, 0 failed")
 
 
-def test_the_unit_a_stage_stopped_at_says_how_many_never_ran(tmp_path: Path) -> None:
+def test_the_project_a_stage_stopped_at_says_how_many_never_ran(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path / "repo", "libs/a", "libs/b")
     created.write("libs/a/tests/test_a.py", FAILING)
     target = tmp_path / "test.verdict"
     created.make("test", environment={VERDICT_VARIABLE: str(target)})
     verdict = read_verdict(target)
     assert verdict is not None
-    assert verdict.headline == "0 passed, 1 failed; 1 unit after it not run"
+    assert verdict.headline == "0 passed, 1 failed; 1 project after it not run"
 
 
-def absent_checker(_unit: Path | None, _harness: Path, _reports: Path) -> stage.Step:
+def absent_checker(_project: Path | None, _harness: Path, _reports: Path) -> stage.Step:
     return stage.Run(["no-such-checker-anywhere"])
 
 
@@ -449,14 +449,14 @@ def test_coverage_short_of_full_never_reads_as_full(tmp_path: Path) -> None:
     assert verdict.first == ["src/a.py: lines 7"]
 
 
-def test_several_units_add_up_to_one_line(tmp_path: Path) -> None:
-    def unit(passed: int, source: str) -> stage.Judged:
+def test_several_projects_add_up_to_one_line(tmp_path: Path) -> None:
+    def project(passed: int, source: str) -> stage.Judged:
         tested = stage.Tested(passed, 0, stage.Share(100.0, source))
         return stage.Judged(Verdict(PASSED, tested.headline()), tested=tested)
 
     skipped = stage.Judged(Verdict(PASSED, "skipped coverage libs/c: no libs/c/src"))
-    verdict = stage.together([unit(3, "libs/a/src"), skipped, unit(2, "libs/b/src")])
-    assert verdict == Verdict(PASSED, "5 passed, 0 failed, 100% of 2 units")
+    verdict = stage.together([project(3, "libs/a/src"), skipped, project(2, "libs/b/src")])
+    assert verdict == Verdict(PASSED, "5 passed, 0 failed, 100% of 2 projects")
 
 
 def test_a_failing_test_keeps_what_it_printed_and_logged(project: Project) -> None:

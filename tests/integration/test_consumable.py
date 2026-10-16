@@ -56,7 +56,7 @@ def consumer_environment(*, online: bool) -> dict[str, str]:
     for inherited in (
         "UV_PROJECT_ENVIRONMENT",
         "VIRTUAL_ENV",
-        "PY_HARNESS_UNITS",
+        "PY_HARNESS_PROJECTS",
         "MAKEFLAGS",
         "MFLAGS",
         "MAKELEVEL",

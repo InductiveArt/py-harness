@@ -16,7 +16,7 @@ from py_harness.verdict import Verdict
 from tests.support import SHARE
 from tests.support import Project
 
-PRINTS_UNITS = 'import os\n\nprint(os.environ["PY_HARNESS_UNITS"])  # noqa: T201\n'
+PRINTS_PROJECTS = 'import os\n\nprint(os.environ["PY_HARNESS_PROJECTS"])  # noqa: T201\n'
 
 
 def test_doctor_runs_every_shared_rule(project: Project) -> None:
@@ -97,9 +97,9 @@ def test_an_unmatched_rule_fails(project: Project) -> None:
     assert "doctor: no check matched 'nope'" in result.stdout
 
 
-def test_checks_receive_the_units_resolved_once(project: Project) -> None:
-    project.write(".py-harness/doctor/report-units.py", PRINTS_UNITS)
-    project.write(".py-harness/doctor/report-again.py", PRINTS_UNITS)
+def test_checks_receive_the_projects_resolved_once(project: Project) -> None:
+    project.write(".py-harness/doctor/report-projects.py", PRINTS_PROJECTS)
+    project.write(".py-harness/doctor/report-again.py", PRINTS_PROJECTS)
     workspace = '\n[tool.uv.workspace]\nmembers = ["libs/*"]\n'
     project.write("pyproject.toml", project.read("pyproject.toml") + workspace)
     project.write("libs/old/pyproject.toml", '[project]\nname = "old"\nversion = "0.0.0"\n')
@@ -109,19 +109,19 @@ def test_checks_receive_the_units_resolved_once(project: Project) -> None:
     assert result.stderr.count("'libs/old' excluded") == 1
 
 
-def test_a_unit_without_a_package_is_announced(project: Project) -> None:
+def test_a_project_without_a_package_is_announced(project: Project) -> None:
     (project.root / "src" / "demo" / "__init__.py").unlink()
     result = project.make("doctor")
     assert "doctor: '.' has no package under src; source rules skip it" in result.stderr
 
 
-def test_doctor_fails_when_units_cannot_resolve(tmp_path: Path) -> None:
+def test_doctor_fails_when_projects_cannot_resolve(tmp_path: Path) -> None:
     created = Project(tmp_path)
     created.write("Makefile", f"include {SHARE / 'harness.mk'}\n")
     created.write("pyproject.toml", '[tool.uv.workspace]\nmembers = ["libs/*"]\n')
     result = created.make("doctor")
     assert result.returncode != 0
-    assert "units: pyproject.toml declares no [project]" in result.stderr
+    assert "projects: pyproject.toml declares no [project]" in result.stderr
 
 
 # #region Verdict

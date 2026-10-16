@@ -6,18 +6,18 @@ from py_harness.console import out
 from py_harness.findings import at_files
 from py_harness.findings import counted
 from py_harness.layout import source_root
-from py_harness.units import units_in_scope
+from py_harness.projects import projects_in_scope
 from py_harness.verdict import FAILED
 from py_harness.verdict import Verdict
 from py_harness.verdict import report
 
 
 def main() -> int:
-    units = units_in_scope(Path.cwd())
+    projects = projects_in_scope(Path.cwd())
     violations = [
         violation
-        for unit in units
-        for path in sorted(source_root(unit).rglob("*.py"))
+        for project in projects
+        for path in sorted(source_root(project).rglob("*.py"))
         for violation in reexports(path)
     ]
     if not violations:

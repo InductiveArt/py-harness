@@ -108,7 +108,7 @@ def test_a_test_report_that_cannot_be_read_reads_as_none(tmp_path: Path) -> None
     assert failed_tests(tmp_path / "tests.json", tmp_path) is None
 
 
-def test_a_test_in_another_unit_is_named_from_the_repository_root(tmp_path: Path) -> None:
+def test_a_test_in_another_project_is_named_from_the_repository_root(tmp_path: Path) -> None:
     problem = {"test": "tests/test_x.py::test_y", "message": "boom", "text": "trace"}
     recorded = {"rootdir": str(tmp_path / "libs" / "a"), "passed": 1, "problems": [problem]}
     (tmp_path / "tests.json").write_text(json.dumps(recorded))

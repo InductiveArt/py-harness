@@ -12,7 +12,7 @@ from tests.support import typed
 
 @pytest.fixture
 def project(tmp_path: Path) -> Project:
-    """A single-unit project wired to this repository's configs, inside a git repository."""
+    """A single-project project wired to this repository's configs, inside a git repository."""
     created = Project(tmp_path / "demo")
     created.write("Makefile", f"include {SHARE / 'harness.mk'}\n")
     created.write("pyproject.toml", manifest())

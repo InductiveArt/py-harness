@@ -34,7 +34,7 @@ def harness_environment() -> dict[str, str]:
     """This repository's venv stands in for a consumer's, with the outer run's state removed."""
     environment = dict(os.environ)
     environment["UV_PROJECT_ENVIRONMENT"] = str(VENV)
-    for inherited in ("VIRTUAL_ENV", "PY_HARNESS_UNITS", "MAKEFLAGS", "MFLAGS", "MAKELEVEL"):
+    for inherited in ("VIRTUAL_ENV", "PY_HARNESS_PROJECTS", "MAKEFLAGS", "MFLAGS", "MAKELEVEL"):
         environment.pop(inherited, None)
     return environment
 

@@ -61,7 +61,7 @@ def cause(text: str, when: str) -> str:
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
-        f"{INTEGRATION}: needs more than its own unit; runs in test-integration, not in test",
+        f"{INTEGRATION}: needs more than its own project; runs in test-integration, not in test",
     )
     target = os.environ.get(REPORT_VARIABLE)
     if target:

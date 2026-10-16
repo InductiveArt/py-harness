@@ -5,9 +5,9 @@ from pathlib import Path
 
 from py_harness.console import out
 from py_harness.layout import source_root
+from py_harness.projects import projects_in_scope
 from py_harness.tables import read_table
 from py_harness.tables import subtable
-from py_harness.units import units_in_scope
 
 # Neither kept nor crossed: the linter could not check the boundaries at all.
 UNCHECKED = 2
@@ -18,9 +18,9 @@ def main() -> int:
     if subtable(read_table(root / "pyproject.toml"), "tool", "importlinter") is None:
         out("doctor: boundaries skipped; pyproject.toml declares none in [tool.importlinter]")
         return 0
-    # Each unit's own source goes first on the path, so the boundaries are
+    # Each project's own source goes first on the path, so the boundaries are
     # judged on this tree and never on an installed copy.
-    sources = [str(source_root(unit).resolve()) for unit in units_in_scope(root)]
+    sources = [str(source_root(project).resolve()) for project in projects_in_scope(root)]
     inherited = [entry for entry in os.environ.get("PYTHONPATH", "").split(os.pathsep) if entry]
     environment = {**os.environ, "PYTHONPATH": os.pathsep.join([*sources, *inherited])}
     # The linter installed beside this interpreter, pinned with it.

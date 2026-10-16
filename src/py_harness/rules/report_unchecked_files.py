@@ -2,9 +2,9 @@ from pathlib import Path
 
 from py_harness.console import out
 from py_harness.findings import counted
+from py_harness.projects import IGNORE_FILE
+from py_harness.projects import ignored_paths
 from py_harness.tree import repository_files
-from py_harness.units import IGNORE_FILE
-from py_harness.units import ignored_paths
 from py_harness.verdict import PASSED
 from py_harness.verdict import Verdict
 from py_harness.verdict import report

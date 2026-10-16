@@ -3,7 +3,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from py_harness.console import out
-from py_harness.units import repository_python_files
+from py_harness.projects import repository_python_files
 
 # Names every module of their kind defines by convention, so sharing one says nothing.
 CONVENTIONAL_NAMES = frozenset({"main", "pytestmark"})

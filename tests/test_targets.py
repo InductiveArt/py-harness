@@ -27,17 +27,17 @@ def test_help_lists_every_declared_target(project: Project) -> None:
     assert missing == []
 
 
-def test_units_prints_every_unit(project: Project) -> None:
-    result = project.make("units")
+def test_projects_prints_every_project(project: Project) -> None:
+    result = project.make("projects")
     assert result.returncode == 0
     assert result.stdout == ".\n"
 
 
-def test_units_reports_what_it_cannot_resolve(project: Project) -> None:
+def test_projects_reports_what_it_cannot_resolve(project: Project) -> None:
     project.write("pyproject.toml", '[tool.uv.workspace]\nmembers = ["libs/*"]\n')
-    result = project.make("units")
+    result = project.make("projects")
     assert result.returncode != 0
-    assert "units: pyproject.toml declares no [project]" in result.stderr
+    assert "projects: pyproject.toml declares no [project]" in result.stderr
 
 
 def test_clean_removes_build_output_and_caches(project: Project) -> None:

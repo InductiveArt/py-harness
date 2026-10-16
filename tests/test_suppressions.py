@@ -58,8 +58,8 @@ def test_a_file_that_is_not_python_holds_no_suppression() -> None:
     assert labels("config.yaml", "key: k  # noqa: E501\n") == []
 
 
-def test_each_excluded_unit_counts() -> None:
-    assert labels(".py-harness/ignore", "# retired\nlibs/old  # kept\n") == ["excluded unit"]
+def test_each_excluded_project_counts() -> None:
+    assert labels(".py-harness/ignore", "# retired\nlibs/old  # kept\n") == ["excluded project"]
 
 
 def test_the_inventory_reads_the_whole_repository(tmp_path: Path) -> None:
@@ -68,7 +68,7 @@ def test_the_inventory_reads_the_whole_repository(tmp_path: Path) -> None:
     project.write("docs/notes.yaml", "key: k  # noqa: E501\n")
     project.write(".py-harness/ignore", "libs/old\n")
     found = sorted(suppression.label for suppression in inventory(project.root))
-    assert found == ["excluded unit", "noqa E501"]
+    assert found == ["excluded project", "noqa E501"]
 
 
 def test_a_file_that_is_not_text_is_skipped(tmp_path: Path) -> None:

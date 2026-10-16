@@ -93,7 +93,7 @@ DISOWNED = {
 
 TARGETS = {
     "help": "tests/test_targets.py::test_help_lists_every_declared_target",
-    "units": "tests/test_targets.py::test_units_prints_every_unit",
+    "projects": "tests/test_targets.py::test_projects_prints_every_project",
     "wiring": "tests/test_wiring.py::test_the_wiring_target_passes_a_wired_project",
     "install": f"{CONSUMER_TESTS}::test_a_consumer_passes_verify",
     "agent": "tests/test_agent.py::test_agent_links_the_rules_and_every_skill_into_the_harness",
@@ -106,9 +106,9 @@ TARGETS = {
     "lint-fix": f"{PROMISE_TESTS}::test_lint_fix_repairs_what_it_safely_can",
     "lint-fix-unsafe": f"{PROMISE_TESTS}::test_lint_fix_unsafe_applies_what_lint_fix_leaves",
     "typecheck": f"{PROMISE_TESTS}::test_typecheck_enforces",
-    "typecheck-pkg": f"{STAGE_TESTS}::test_typecheck_pkg_checks_only_the_named_unit",
+    "typecheck-project": f"{STAGE_TESTS}::test_typecheck_pkg_checks_only_the_named_project",
     "test": f"{STAGE_TESTS}::test_test_runs_the_tests_outside_integration",
-    "test-pkg": f"{STAGE_TESTS}::test_test_pkg_runs_only_the_named_unit",
+    "test-project": f"{STAGE_TESTS}::test_test_pkg_runs_only_the_named_project",
     "test-integration": f"{STAGE_TESTS}::test_test_integration_runs_only_integration_tests",
     "coverage": f"{STAGE_TESTS}::test_coverage_fails_below_full_branch_coverage",
     "fix-check": "tests/test_loop.py::test_fix_check_passes_a_clean_project",

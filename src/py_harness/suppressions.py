@@ -9,10 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeAlias
 
+from py_harness.projects import IGNORE_FILE
 from py_harness.tables import as_list
 from py_harness.tables import as_table
 from py_harness.tree import repository_files
-from py_harness.units import IGNORE_FILE
 from py_harness.verdict import decoded
 
 NOQA = re.compile(r"#\s*noqa\b(?::\s*(?P<codes>[A-Za-z]+\d+(?:[\s,]+[A-Za-z]+\d+)*))?")
@@ -106,7 +106,7 @@ def suppressions_at_head(root: Path, path: str) -> list[Suppression]:
 
 def suppressions_in_text(path: str, text: str) -> list[Suppression]:
     if path == IGNORE_FILE.as_posix():
-        return excluded_units(path, text)
+        return excluded_projects(path, text)
     if not path.endswith(".py"):
         return []
     return [
@@ -173,10 +173,12 @@ def is_pytest(node: ast.expr) -> bool:
     return isinstance(node, ast.Attribute) and node.attr == "mark" and is_pytest(node.value)
 
 
-def excluded_units(path: str, text: str) -> list[Suppression]:
+def excluded_projects(path: str, text: str) -> list[Suppression]:
     lines = enumerate(text.splitlines(), start=1)
     entries = ((number, line.split("#", 1)[0].strip()) for number, line in lines)
-    return [Suppression(path, number, "excluded unit", entry) for number, entry in entries if entry]
+    return [
+        Suppression(path, number, "excluded project", entry) for number, entry in entries if entry
+    ]
 
 
 # #region Recorded type errors

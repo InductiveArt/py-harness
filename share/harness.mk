@@ -11,9 +11,9 @@ PY := $(RUN) python -m py_harness
 # Sets a stage's output off in the log, under the stage's name.
 announce = @printf '\n→ %s\n' '$@'
 
-.PHONY: help units wiring install agent audit clean update \
+.PHONY: help projects wiring install agent audit clean update \
         format format-fix lint lint-fix lint-fix-unsafe \
-        typecheck typecheck-pkg baseline test test-pkg test-integration coverage \
+        typecheck typecheck-project baseline test test-project test-integration coverage \
         fix-check verify last doctor
 
 # #region Orientation
@@ -21,14 +21,14 @@ announce = @printf '\n→ %s\n' '$@'
 help:
 	@echo "Shared targets (from py-harness):"
 	@echo ""
-	@echo "  units         list what every stage will cover, and why anything is skipped"
+	@echo "  projects      list what every stage will cover, and why anything is skipped"
 	@echo "  wiring        confirm every tool config reaches the harness's"
 	@echo ""
 	@echo "Install / cleanup:"
 	@echo "  install       uv sync exactly what uv.lock pins"
 	@echo "  agent         link the agent's rules and skills into .claude/, kept out of git"
 	@echo "  audit         what the agent gates decided in this clone, newest last"
-	@echo "  clean         remove every unit's dist/, the caches and .venv"
+	@echo "  clean         remove every project's dist/, the caches and .venv"
 	@echo "  update        upgrade uv.lock and sync"
 	@echo ""
 	@echo "Ruff, repo-wide:"
@@ -40,12 +40,12 @@ help:
 	@echo ""
 	@echo "Types:"
 	@echo "  typecheck         basedpyright over the whole repo"
-	@echo "  typecheck-pkg     one unit, PKG=<project name>"
+	@echo "  typecheck-project one project, PROJECT=<project name>"
 	@echo "  baseline          record today's type errors, so only new ones fail; the user's call"
 	@echo ""
-	@echo "Tests, per unit:"
+	@echo "Tests, per project:"
 	@echo "  test              every test not marked integration"
-	@echo "  test-pkg          the same, one unit, PKG=<project name>"
+	@echo "  test-project      the same, one project, PROJECT=<project name>"
 	@echo "  test-integration  tests marked integration only"
 	@echo "  coverage          every test, failing below full branch coverage"
 	@echo ""
@@ -55,10 +55,10 @@ help:
 	@echo "  last          the newest fix-check or verify run again, from its logs, running nothing"
 	@echo "  doctor        structural health (RULE=<name> runs one rule)"
 
-# `units` is a target rather than an internal detail because the first
-# question about any failing stage is which units it actually ran.
-units:
-	@$(PY).units
+# `projects` is a target rather than an internal detail because the first
+# question about any failing stage is which projects it actually ran.
+projects:
+	@$(PY).projects
 
 wiring:
 	@$(PY).wiring $(HARNESS)
@@ -77,7 +77,7 @@ audit:
 	@$(PY).audit
 
 clean:
-	@$(PY).units | while IFS= read -r unit; do rm -rf "$$unit/dist"; done
+	@$(PY).projects | while IFS= read -r project; do rm -rf "$$project/dist"; done
 	rm -rf .ruff_cache .pytest_cache .venv
 
 update:
@@ -107,8 +107,8 @@ lint-fix-unsafe:
 
 typecheck:
 	@$(PY).stage $(HARNESS) typecheck
-typecheck-pkg:
-	@$(PY).stage $(HARNESS) typecheck $(call required_pkg)
+typecheck-project:
+	@$(PY).stage $(HARNESS) typecheck $(call required_project)
 baseline:
 	@$(PY).baseline $(HARNESS)
 
@@ -116,15 +116,15 @@ baseline:
 
 test:
 	@$(PY).stage $(HARNESS) test
-test-pkg:
-	@$(PY).stage $(HARNESS) test $(call required_pkg)
+test-project:
+	@$(PY).stage $(HARNESS) test $(call required_project)
 test-integration:
 	@$(PY).stage $(HARNESS) test-integration
 coverage:
 	@$(PY).stage $(HARNESS) coverage
 
-# A -pkg target without PKG would silently cover every unit instead of one.
-required_pkg = $(if $(PKG),$(PKG),$(error PKG=<project name> is required))
+# A -project target without PROJECT would silently cover every project instead of one.
+required_project = $(if $(PROJECT),$(PROJECT),$(error PROJECT=<project name> is required))
 
 # #region Composed
 
