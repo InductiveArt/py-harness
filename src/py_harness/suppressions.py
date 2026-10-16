@@ -97,7 +97,9 @@ def suppressions_in_file(root: Path, path: str) -> list[Suppression]:
 
 
 def suppressions_at_head(root: Path, path: str) -> list[Suppression]:
-    shown = git(root, "show", f"HEAD:{path}")
+    # The leading `./` reads the path as this project's; without it git reads it as the
+    # repository's, which is a different file whenever the project is not the root.
+    shown = git(root, "show", f"HEAD:./{path}")
     return [] if shown is None else suppressions_in_text(path, shown)
 
 
@@ -192,7 +194,7 @@ def recorded(root: Path) -> Tally | None:
     present = recorded_errors(text)
     if git(root, "rev-parse", "--verify", "--quiet", "HEAD") is None:
         return Tally(present, None, None)
-    before = recorded_errors(git(root, "show", f"HEAD:{BASELINE.as_posix()}"))
+    before = recorded_errors(git(root, "show", f"HEAD:./{BASELINE.as_posix()}"))
     return Tally(present, len(present) - len(before), new_entries(present, before))
 
 
@@ -236,7 +238,9 @@ def new_entries(present: list[Suppression], before: list[Suppression]) -> list[S
 
 
 def changed_lines(root: Path) -> Changes | None:
-    diff = git(root, "diff", "HEAD", "--unified=0", "--no-color")
+    # Both answer in paths relative to this project, which a diff does only when asked:
+    # git reports from the repository root, and a listing from the directory it runs in.
+    diff = git(root, "diff", "--relative", "HEAD", "--unified=0", "--no-color")
     untracked = git(root, "ls-files", "-z", "--others", "--exclude-standard")
     if diff is None or untracked is None:
         return None

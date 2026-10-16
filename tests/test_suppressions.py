@@ -127,6 +127,19 @@ def test_a_deleted_file_takes_its_suppressions_with_it(tmp_path: Path) -> None:
     assert tally(project.root).change == -1
 
 
+def test_a_project_below_the_repository_root_counts_its_own_change(tmp_path: Path) -> None:
+    """A workspace holds a project below the repository root, which git answers from."""
+    project = Project(tmp_path)
+    project.write("web/app.ts", "export const x = 1;\n")
+    project.write("py/src/app.py", "x = 1  # noqa: E501\n")
+    project.git("init", "-q")
+    project.commit()
+    project.write("py/src/app.py", "x = 1  # noqa: E501\ny = 2  # noqa: E501\n")
+    counted = tally(tmp_path / "py")
+    added = [(found.path, found.line) for found in counted.added or []]
+    assert (counted.change, added, len(counted.present)) == (1, [("src/app.py", 2)], 2)
+
+
 def test_without_a_commit_the_change_is_unknown(tmp_path: Path) -> None:
     project = Project(tmp_path)
     project.write("src/app.py", "x = 1  # noqa: E501\n")
