@@ -29,6 +29,7 @@ def test_doctor_runs_every_shared_rule(project: Project) -> None:
         "no-hidden-names OK",
         "suppressions none",
         "shared-names none",
+        "unchecked-files none",
     ):
         assert f"doctor: {verdict}" in result.stdout
 
@@ -62,7 +63,7 @@ def test_one_line_verdicts_stay_together_and_longer_output_is_set_off(project: P
     verdicts = "doctor: no-hidden-names OK\ndoctor: no-reexport OK\n\n"
     verdicts_then_blocks = verdicts + "a1\na2\n\nb1\nb2\n\n"
     assert verdicts_then_blocks + "doctor: shared-names none\n" in stdout
-    assert stdout.endswith("doctor: suppressions none\n\nz1\nz2\n")
+    assert stdout.endswith("doctor: unchecked-files none\n\nz1\nz2\n")
 
 
 def test_a_file_without_a_kind_prefix_is_not_run(project: Project) -> None:

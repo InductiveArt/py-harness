@@ -498,6 +498,54 @@ def test_report_suppressions_without_python_gives_no_density(project: Project) -
     )
 
 
+# #region report-unchecked-files
+
+
+def test_report_unchecked_files_names_code_no_stage_reads(project: Project) -> None:
+    project.write("crates/fast/src/lib.rs", "pub fn double(v: i32) -> i32 { v * 2 }\n")
+    project.write("scripts/deploy.sh", "rm -rf $TARGET\n")
+    report = project.make("doctor", "RULE=unchecked-files")
+    assert report.returncode == 0
+    assert "Code no stage covers (2):" in report.stdout
+    assert "  crates/fast/src/lib.rs\n" in report.stdout
+    assert "  scripts/deploy.sh\n" in report.stdout
+
+
+def test_a_script_declaring_its_interpreter_counts_without_an_extension(project: Project) -> None:
+    project.write("scripts/deploy", "#!/bin/sh\nrm -rf $TARGET\n")
+    project.write("scripts/notes", "a plain file naming no interpreter\n")
+    report = project.make("doctor", "RULE=unchecked-files").stdout
+    assert "  scripts/deploy\n" in report
+    assert "notes" not in report
+
+
+def test_a_compiled_file_declares_no_interpreter(project: Project) -> None:
+    compiled = project.root / "scripts" / "compiled"
+    compiled.parent.mkdir(parents=True, exist_ok=True)
+    compiled.write_bytes(b"\xfe\xed\xfa\xcf")
+    assert "doctor: unchecked-files none" in project.make("doctor", "RULE=unchecked-files").stdout
+
+
+def test_a_link_that_leads_nowhere_declares_no_interpreter(project: Project) -> None:
+    broken = project.root / "scripts" / "broken"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    broken.symlink_to("nowhere")
+    assert "doctor: unchecked-files none" in project.make("doctor", "RULE=unchecked-files").stdout
+
+
+def test_python_and_prose_are_not_reported_as_unchecked(project: Project) -> None:
+    project.write("src/demo/covered.py", "VALUE = 1\n")
+    project.write("docs/guide.md", "# Guide\n")
+    assert "doctor: unchecked-files none" in project.make("doctor", "RULE=unchecked-files").stdout
+
+
+def test_the_ignore_file_accepts_unchecked_code(project: Project) -> None:
+    project.write("scripts/deploy.sh", "rm -rf $TARGET\n")
+    project.write("crates/fast/src/lib.rs", "pub fn f() {}\n")
+    project.write(".py-harness/ignore", "scripts/deploy.sh\ncrates\n")
+    assert "doctor: unchecked-files none" in project.make("doctor", "RULE=unchecked-files").stdout
+
+
 # #region report-shared-names
 
 

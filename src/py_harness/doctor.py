@@ -142,6 +142,8 @@ def part(check: Checked) -> Part:
         return Part(check.name, FAILED, "" if found is None else counted(found, "finding"))
     if check.code != 0:
         return Part(check.name, BROKEN, f"crashed, exit {check.code}")
+    if check.verdict is not None:
+        return Part(check.name, PASSED, check.verdict.headline)
     return Part(check.name, PASSED, said(check))
 
 

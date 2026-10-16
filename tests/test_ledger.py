@@ -131,6 +131,9 @@ SHARED_RULES = {
     ),
     "rule-no-blanket-exemptions": f"{RULE_TESTS}::test_no_blanket_exemptions_rejects",
     "rule-no-hidden-names": f"{RULE_TESTS}::test_no_hidden_names_rejects",
+    "report-unchecked-files": (
+        f"{RULE_TESTS}::test_report_unchecked_files_names_code_no_stage_reads"
+    ),
 }
 
 # The general notes that precede the cycle, mapped the same way.
