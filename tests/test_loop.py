@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from py_harness import loop
+from py_harness.doctor import check_name
 from py_harness.doctor import discover
 from py_harness.logs import RUNNING
 from py_harness.logs import RunRecord
@@ -43,6 +44,15 @@ LOGS = ".git/py-harness/logs/fix-check"
 NOTHING_SUPPRESSED = Tally([], 0, [])
 FAILING = "def test_fails() -> None:\n    assert 1 + 1 == 3\n"
 LOUD = 'print("hello")\n'
+# A file two checks each find something in, on different lines.
+MIXED = """
+import json as serial
+
+
+# Mentions missing_helper.run, which this file cannot see.
+def dump(value: str) -> str:
+    return serial.dumps(value)
+"""
 # A test that leaves its process id where the test can find it, then never ends.
 HANGING = """
 import os
@@ -96,7 +106,7 @@ def test_fix_check_prints_one_line_per_stage_and_per_doctor_check(project: Proje
     named = [line.split()[0] for line in stdout.splitlines() if re.match(r"  \S", line)]
     assert named == list(loop.LOOPS["fix-check"])
     checks = [line.split()[0] for line in stdout.splitlines() if re.match(r"    \S", line)]
-    assert checks == [check.stem for check in discover(project.root)]
+    assert checks == [check_name(check) for check in discover(project.root)]
 
 
 def test_each_log_opens_with_its_stages_lines_as_the_run_printed_them(project: Project) -> None:
@@ -163,6 +173,17 @@ def test_fix_check_runs_the_doctor(project: Project) -> None:
     stdout = project.make("fix-check").stdout
     assert "  rule-no-cycles: Import cycles (forbidden): cycle in .:" in stdout
     assert re.search(r"\n    rule-no-cycles +failed +1 finding\n", stdout)
+
+
+def test_the_doctors_findings_file_holds_a_section_per_file(project: Project) -> None:
+    passing_project(project).write("src/demo/mixed.py", MIXED)
+    project.make("fix-check")
+    section = (
+        "\n## src/demo/mixed.py (2)\n"
+        "4  missing_helper.run  (rule-no-comment-overreach)\n"
+        "1  `json as serial`  (rule-no-hidden-names)\n"
+    )
+    assert section in project.read(f"{LOGS}/doctor.txt")
 
 
 def test_a_check_gets_its_own_line_under_its_stage() -> None:

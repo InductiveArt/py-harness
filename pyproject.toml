@@ -36,3 +36,22 @@ extend = "share/ruff.toml"
 
 [tool.basedpyright]
 extends = "share/pyrightconfig.json"
+
+[tool.importlinter]
+root_packages = ["py_harness"]
+
+[[tool.importlinter.contracts]]
+name = "Commands sit on records, records sit on plumbing"
+type = "layers"
+containers = ["py_harness"]
+exhaustive = true
+layers = [
+    "stop_gate",
+    "change_gate",
+    "loop",
+    "stage : doctor : summary : agent : baseline : audit : guard",
+    "logs : rules",
+    "findings : layout : suppressions : pytest_plugin",
+    "verdict : transcript : units : wiring",
+    "console : tables : tree",
+]

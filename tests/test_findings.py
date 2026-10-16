@@ -5,6 +5,7 @@ import pytest
 
 from py_harness.findings import Finding
 from py_harness.findings import Problem
+from py_harness.findings import at_files
 from py_harness.findings import basedpyright_errors
 from py_harness.findings import by_file
 from py_harness.findings import coverage_gaps
@@ -70,6 +71,19 @@ def test_a_syntax_error_is_named_though_ruff_gives_it_no_code() -> None:
 
 def test_a_path_outside_the_repository_stays_whole() -> None:
     assert relative("/elsewhere/a.py", ROOT) == "/elsewhere/a.py"
+
+
+def test_a_checks_findings_are_grouped_under_each_file_in_line_order() -> None:
+    found = [("b.py", 2, "late"), ("a.py", 9, "ninth"), ("b.py", 1, "early"), ("a.py", 10, "tenth")]
+    assert at_files(found) == [
+        Section("a.py", ["9  ninth", "10  tenth"]),
+        Section("b.py", ["1  early", "2  late"]),
+    ]
+
+
+def test_the_file_holding_the_most_findings_is_listed_first() -> None:
+    found = [("few.py", 1, "one"), ("many.py", 1, "one"), ("many.py", 2, "two")]
+    assert [section.title for section in at_files(found)] == ["many.py", "few.py"]
 
 
 def test_findings_are_listed_file_by_file_the_fullest_first() -> None:

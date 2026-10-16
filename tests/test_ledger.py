@@ -1,10 +1,11 @@
 import subprocess
 import sys
 
+from py_harness.doctor import SHARED_CHECKS
+from py_harness.doctor import check_name
+from py_harness.doctor import kind_index
 from tests.support import REPOSITORY
 from tests.support import declared_targets
-
-RULES_DIRECTORY = REPOSITORY / "src" / "py_harness" / "rules"
 
 PROMISE_TESTS = "tests/test_promises.py"
 RULE_TESTS = "tests/test_rules.py"
@@ -161,7 +162,8 @@ def test_every_declared_target_is_proven() -> None:
 
 
 def test_every_shared_rule_is_proven() -> None:
-    assert sorted(SHARED_RULES) == sorted(path.stem for path in RULES_DIRECTORY.glob("*.py"))
+    discoverable = [path for path in SHARED_CHECKS.glob("*.py") if kind_index(path) is not None]
+    assert sorted(SHARED_RULES) == sorted(check_name(path) for path in discoverable)
 
 
 def test_no_checklist_item_is_both_proven_and_disowned() -> None:

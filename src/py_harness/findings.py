@@ -68,6 +68,19 @@ def relative(path: str, root: Path) -> str:
     return path if within.startswith("..") else within
 
 
+def at_files(found: list[tuple[str, int, str]]) -> list[Section]:
+    """Findings given as a file, a line number and what was found there, under the file
+    holding them: the file with the most first, and each file's own in line order."""
+    files: dict[str, list[tuple[int, str]]] = {}
+    for path, line, detail in found:
+        files.setdefault(path, []).append((line, detail))
+    order = sorted(files, key=lambda path: (-len(files[path]), path))
+    return [
+        Section(path, [f"{line}  {detail}" for line, detail in sorted(files[path])])
+        for path in order
+    ]
+
+
 def by_file(findings: list[Finding], noun: str) -> Verdict:
     """Counted per rule, and listed file by file, the file with most findings first."""
     files: dict[str, list[Finding]] = {}

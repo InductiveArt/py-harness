@@ -3,8 +3,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from py_harness.console import out
+from py_harness.findings import at_files
+from py_harness.findings import counted
 from py_harness.layout import source_root
 from py_harness.units import units_in_scope
+from py_harness.verdict import FAILED
+from py_harness.verdict import Verdict
+from py_harness.verdict import report
 
 
 def main() -> int:
@@ -19,23 +24,24 @@ def main() -> int:
         out("doctor: no-reexport OK")
         return 0
     out("Re-exports (forbidden):")
-    for violation in violations:
-        out(f"  {violation}")
+    for place, number, finding in violations:
+        out(f"  {place}:{number}  {finding}")
     out()
     out("Rule: a symbol is imported from the module that defines it, and from nowhere else.")
     out("Import it from there and delete the re-export.")
+    report(Verdict(FAILED, counted(len(violations), "finding"), sections=at_files(violations)))
     return 1
 
 
-def reexports(path: Path) -> Iterator[str]:
+def reexports(path: Path) -> Iterator[tuple[str, int, str]]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imported = imported_names(tree)
     for node in ast.walk(tree):
         for finding in [*redundant_aliases(node), *exported_imports(node, imported)]:
-            yield f"{path.as_posix()}:{getattr(node, 'lineno', 0)}  {finding}"
+            yield path.as_posix(), getattr(node, "lineno", 0), finding
     for statement in tree.body:
         for finding in aliased_imports(statement, imported):
-            yield f"{path.as_posix()}:{statement.lineno}  {finding}"
+            yield path.as_posix(), statement.lineno, finding
 
 
 def imported_names(tree: ast.Module) -> set[str]:

@@ -8,7 +8,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from py_harness.console import out
+from py_harness.findings import at_files
+from py_harness.findings import counted
 from py_harness.units import repository_python_files
+from py_harness.verdict import FAILED
+from py_harness.verdict import Verdict
+from py_harness.verdict import report
 
 URL = re.compile(r"https?://\S+")
 BACKTICKED = re.compile(r"`[^`]+`")
@@ -34,22 +39,23 @@ def main() -> int:
         out("doctor: no-comment-overreach OK")
         return 0
     out("Comments naming what their file cannot see (forbidden):")
-    for violation in violations:
-        out(f"  {violation}")
+    for place, number, finding in violations:
+        out(f"  {place}:{number}  {finding}")
     out()
     out("Rule: a comment names only what its own file defines, imports or quotes.")
     out("State this file's contract instead of describing code that lives elsewhere.")
+    report(Verdict(FAILED, counted(len(violations), "finding"), sections=at_files(violations)))
     return 1
 
 
-def out_of_reach(path: Path) -> Iterator[str]:
+def out_of_reach(path: Path) -> Iterator[tuple[str, int, str]]:
     source = path.read_text(encoding="utf-8")
     documented = docstrings(ast.parse(source))
     reach = file_reach(source, documented) | set(path.with_suffix("").parts)
     for line, text in comments_and_docstrings(source, documented):
         missing = sorted(name for name in named(text) if not within(name, reach))
         if missing:
-            yield f"{path.as_posix()}:{line}  {', '.join(missing)}"
+            yield path.as_posix(), line, ", ".join(missing)
 
 
 def docstrings(tree: ast.Module) -> dict[tuple[int, int], str]:

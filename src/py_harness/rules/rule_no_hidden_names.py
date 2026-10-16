@@ -3,7 +3,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from py_harness.console import out
+from py_harness.findings import at_files
+from py_harness.findings import counted
 from py_harness.units import repository_python_files
+from py_harness.verdict import FAILED
+from py_harness.verdict import Verdict
+from py_harness.verdict import report
 
 # The alias every codebase gives these modules, so a search for their uses already tries it.
 CONVENTIONAL_ALIASES = {
@@ -34,21 +39,22 @@ def main() -> int:
         out("doctor: no-hidden-names OK")
         return 0
     out("Hidden names (forbidden):")
-    for violation in violations:
-        out(f"  {violation}")
+    for place, number, finding in violations:
+        out(f"  {place}:{number}  {finding}")
     out()
     out("Rule: code spells a symbol by its own name wherever it uses it, so a search for the")
     out("name finds every use. Import it under its own name; when two names collide, import")
     out("the module and qualify, or rename one where it is defined. Reach attributes and")
     out("modules by name in the code, never through a string.")
+    report(Verdict(FAILED, counted(len(violations), "finding"), sections=at_files(violations)))
     return 1
 
 
-def hidden_names(path: Path) -> Iterator[str]:
+def hidden_names(path: Path) -> Iterator[tuple[str, int, str]]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     for node in ast.walk(tree):
         for finding in [*renames(node), *runtime_lookups(node)]:
-            yield f"{path.as_posix()}:{getattr(node, 'lineno', 0)}  {finding}"
+            yield path.as_posix(), getattr(node, "lineno", 0), finding
 
 
 def renames(node: ast.AST) -> list[str]:

@@ -11,6 +11,8 @@ from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
 from py_harness.verdict import Part
+from py_harness.verdict import Section
+from py_harness.verdict import Verdict
 from tests.support import SHARE
 from tests.support import Project
 
@@ -122,6 +124,41 @@ def test_doctor_fails_when_units_cannot_resolve(tmp_path: Path) -> None:
 
 
 # #region Verdict
+
+
+def reported(name: str, headline: str, sections: list[Section]) -> Checked:
+    """A check that found something and reported it, as the doctor reads it back."""
+    return Checked(name, 1, [], "", Verdict(FAILED, headline, sections=sections))
+
+
+def test_every_checks_findings_in_one_file_are_listed_under_that_file() -> None:
+    finished = [
+        reported(
+            "rule-one", "2 findings", [Section("a.py", ["1  first"]), Section("b.py", ["7 b"])]
+        ),
+        reported("rule-two", "1 finding", [Section("a.py", ["4  second"])]),
+    ]
+    assert judged(finished).sections == [
+        Section("a.py (2)", ["1  first  (rule-one)", "4  second  (rule-two)"]),
+        Section("b.py (1)", ["7 b  (rule-one)"]),
+    ]
+
+
+def test_a_reported_headline_is_the_checks_own_line() -> None:
+    finished = [reported("rule-one", "3 findings", [Section("a.py", ["1  x"])])]
+    assert judged(finished).parts == [Part("rule-one", FAILED, "3 findings")]
+
+
+def test_a_check_that_reports_nothing_keeps_its_output_under_its_own_name() -> None:
+    finished = [Checked("rule-local", 1, ["Found (forbidden):", "  a.py:1  why"], "")]
+    assert judged(finished).sections == [
+        Section("rule-local", ["Found (forbidden):", "  a.py:1  why"])
+    ]
+
+
+def test_a_crash_keeps_its_output_even_when_it_reported_findings() -> None:
+    crashed = Checked("rule-one", CRASHED, ["partial"], "boom\n", Verdict(FAILED, "1 finding"))
+    assert judged([crashed]).sections == [Section("rule-one", ["partial", "boom"])]
 
 
 def test_a_crashed_check_breaks_the_doctor_and_names_its_error() -> None:

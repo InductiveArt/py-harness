@@ -5,7 +5,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from py_harness.console import out
+from py_harness.findings import at_files
+from py_harness.findings import counted
 from py_harness.units import repository_python_files
+from py_harness.verdict import FAILED
+from py_harness.verdict import Verdict
+from py_harness.verdict import report
 
 # Each of these exempts more than its own line, or exempts without naming a
 # rule, so no check can tell whether it still suppresses anything.
@@ -25,20 +30,21 @@ def main() -> int:
         out("doctor: no-blanket-exemptions OK")
         return 0
     out("Blanket exemptions (forbidden):")
-    for violation in violations:
-        out(f"  {violation}")
+    for place, number, finding in violations:
+        out(f"  {place}:{number}  {finding}")
     out()
     out("Rule: no file or region exempts itself from a check. Fix the finding, or suppress the")
     out("one line it is on with a comment that names the rule.")
+    report(Verdict(FAILED, counted(len(violations), "finding"), sections=at_files(violations)))
     return 1
 
 
-def exemptions(path: Path) -> Iterator[str]:
+def exemptions(path: Path) -> Iterator[tuple[str, int, str]]:
     source = path.read_text(encoding="utf-8")
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         kind = blanket_kind(token) if token.type == tokenize.COMMENT else None
         if kind is not None:
-            yield f"{path.as_posix()}:{token.start[0]}  {kind}: `{token.string.strip()}`"
+            yield path.as_posix(), token.start[0], f"{kind}: `{token.string.strip()}`"
 
 
 def blanket_kind(comment: tokenize.TokenInfo) -> str | None:
