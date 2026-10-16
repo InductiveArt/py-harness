@@ -105,7 +105,7 @@ Dataframes: frames in, typed values out. Operations on a frame are typed by its 
 
 ## Setup
 
-A project's settings may add, never lower; `wiring` names any setting it refuses. What a project may add:
+A project's settings describe its environment, never which rules run: those are the harness's, so every repository is held to one bar. A rule the project wants moves in the harness, for every repository at once, not here. `wiring` names any setting it refuses. What a project may still declare:
 
 - A stub package for an untyped library, as a dev dependency.
 - The `integration` mark on a test that needs a service.

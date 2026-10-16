@@ -36,7 +36,7 @@ def test_a_project_without_a_manifest_is_a_problem(project: Project) -> None:
 
 
 def test_a_nested_ruff_config_must_reach_the_harness(project: Project) -> None:
-    project.write("libs/a/ruff.toml", 'extend-select = ["D"]\n')
+    project.write("libs/a/ruff.toml", 'src = ["src"]\n')
     assert problems(project) == [
         f"libs/a/ruff.toml: does not extend {(SHARE / 'ruff.toml').as_posix()}"
     ]
@@ -202,12 +202,12 @@ def test_the_harness_directory_is_not_searched(project: Project) -> None:
 # #region Floor
 
 RUFF_LOWERED = (
-    "can remove or relax a shared rule; a repository's"
-    " ruff settings only extend the harness, name sources, or add rules"
+    "moves a shared rule; a repository's ruff settings only extend the harness and name its"
+    " sources, since which rules run is the harness's to decide"
 )
 BASEDPYRIGHT_LOWERED = (
-    "can lower the shared type checking;"
-    ' only environment settings and rules raised to "error" belong here'
+    "moves the shared type checking; only environment settings belong here, since which rules"
+    " run is the harness's to decide"
 )
 
 
@@ -237,6 +237,9 @@ def with_settings(project: Project, ruff: str = "", basedpyright: str = "") -> N
         ),
         pytest.param('extend-exclude = ["generated"]\n', "extend-exclude", id="exclude"),
         pytest.param(
+            '[tool.ruff.lint]\nextend-select = ["D"]\n', "lint.extend-select", id="rule-added"
+        ),
+        pytest.param(
             "[tool.ruff.lint.isort]\nforce-single-line = false\n",
             "lint.isort.force-single-line",
             id="import-layout",
@@ -255,11 +258,12 @@ def test_a_ruff_setting_that_can_lower_the_floor_is_a_problem(
     [
         pytest.param('src = ["src/main"]\n', id="src"),
         pytest.param('namespace-packages = ["src/ns"]\n', id="namespace-packages"),
-        pytest.param('[tool.ruff.lint]\nextend-select = ["D"]\n', id="extend-select"),
         pytest.param('[tool.ruff.lint.isort]\nknown-first-party = ["demo"]\n', id="isort"),
     ],
 )
-def test_a_ruff_setting_that_only_adds_is_allowed(project: Project, setting: str) -> None:
+def test_a_ruff_setting_that_only_describes_the_environment_is_allowed(
+    project: Project, setting: str
+) -> None:
     with_settings(project, ruff=setting)
     assert problems(project) == []
 
@@ -272,6 +276,9 @@ def test_a_ruff_setting_that_only_adds_is_allowed(project: Project, setting: str
             'reportMissingSuperCall = "warning"\n', "reportMissingSuperCall", id="rule-below-error"
         ),
         pytest.param('typeCheckingMode = "standard"\n', "typeCheckingMode", id="mode"),
+        pytest.param(
+            'reportMissingSuperCall = "error"\n', "reportMissingSuperCall", id="rule-raised"
+        ),
         pytest.param('ignore = ["src"]\n', "ignore", id="ignore"),
         pytest.param('baselineFile = "old.json"\n', "baselineFile", id="baseline-elsewhere"),
     ],
@@ -288,10 +295,12 @@ def test_a_basedpyright_setting_that_can_lower_the_floor_is_a_problem(
 @pytest.mark.parametrize(
     "setting",
     [
-        pytest.param('reportMissingSuperCall = "error"\n', id="rule-raised"),
         pytest.param('pythonVersion = "3.11"\n', id="environment"),
+        pytest.param('extraPaths = ["src/generated"]\n', id="paths"),
     ],
 )
-def test_a_basedpyright_setting_that_only_adds_is_allowed(project: Project, setting: str) -> None:
+def test_a_basedpyright_setting_that_only_describes_the_environment_is_allowed(
+    project: Project, setting: str
+) -> None:
     with_settings(project, basedpyright=setting)
     assert problems(project) == []

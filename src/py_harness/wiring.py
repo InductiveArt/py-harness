@@ -25,15 +25,14 @@ CONFIG_NAMES = frozenset(
     }
 )
 ROOT_MANIFEST = Path("pyproject.toml")
-# What a repository's own tool settings may do: point at the harness, describe
-# its environment, or add checks. Every other setting can lower the shared floor.
-RUFF_ADDITIONS = frozenset(
+# What a repository's own tool settings may do: point at the harness and describe its
+# environment. Which rules run is the harness's to decide, so that every repository it
+# checks is held to one bar; every other setting either lowers that bar or moves it.
+RUFF_ENVIRONMENT = frozenset(
     {
         "extend",
         "src",
         "namespace-packages",
-        "extend-select",
-        "lint.extend-select",
         "lint.isort.known-first-party",
         "lint.isort.known-third-party",
         "lint.isort.known-local-folder",
@@ -102,10 +101,11 @@ def ruff_problems(root: Path, harness_config: Path, files: list[Path]) -> Iterat
 
 def lowered_ruff_settings(root: Path, config: Path) -> Iterator[str]:
     for key in ruff_settings(root / config):
-        if key not in RUFF_ADDITIONS:
+        if key not in RUFF_ENVIRONMENT:
             yield (
-                f"{config.as_posix()}: `{key}` can remove or relax a shared rule; a repository's"
-                " ruff settings only extend the harness, name sources, or add rules"
+                f"{config.as_posix()}: `{key}` moves a shared rule; a repository's ruff settings"
+                " only extend the harness and name its sources, since which rules run is the"
+                " harness's to decide"
             )
 
 
@@ -161,16 +161,13 @@ def basedpyright_problems(root: Path, harness_config: Path, files: list[Path]) -
     # A missing base leaves basedpyright on its defaults, and it still exits 0.
     if extended != harness_config.resolve():
         yield f"pyproject.toml: [tool.basedpyright] extends must name {harness_config.as_posix()}"
-    for key, value in settings.items():
-        if key not in BASEDPYRIGHT_ENVIRONMENT and not is_raised_rule(key, value):
+    for key in settings:
+        if key not in BASEDPYRIGHT_ENVIRONMENT:
             yield (
-                f"pyproject.toml: [tool.basedpyright] `{key}` can lower the shared type checking;"
-                ' only environment settings and rules raised to "error" belong here'
+                f"pyproject.toml: [tool.basedpyright] `{key}` moves the shared type checking;"
+                " only environment settings belong here, since which rules run is the harness's"
+                " to decide"
             )
-
-
-def is_raised_rule(key: str, value: object) -> bool:
-    return key.startswith("report") and value == "error"
 
 
 def unread_basedpyright_config(root: Path, file: Path) -> Iterator[str]:

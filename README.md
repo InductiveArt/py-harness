@@ -102,12 +102,13 @@ own. In a codebase that already passes, there is nothing to do in any of them.
 
 ## Configuration
 
-A project's own settings may add rules and describe its environment, never
-lower the shared bar. `wiring` refuses an `ignore`, a per-file ignore, a
-replaced `select`, a raised threshold, a basedpyright rule or mode below the
-shared one, a pytest setting that changes which tests run or how they count,
-basedpyright or pytest settings outside the root `pyproject.toml`, and any
-coverage settings, since coverage always runs on the harness's.
+A project's own settings describe its environment, never which rules run: those
+are the harness's, so every repository it checks is held to one bar. `wiring`
+refuses any ruff setting but `extend`, a source path and an import
+classification; any basedpyright setting but an environment one; a pytest
+setting that changes which tests run or how they count; basedpyright or pytest
+settings outside the root `pyproject.toml`; and any coverage settings, since
+coverage always runs on the harness's.
 
 - **Layout.** Code in `src/`, tests in `tests/`. A project laid out otherwise
   says so once:
