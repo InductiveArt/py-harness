@@ -321,6 +321,7 @@ def test_a_run_told_to_stop_ends_its_stage_and_says_where_it_stopped(project: Pr
         cwd=project.root,
         env={**harness_environment(), MARKER: str(marker)},
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         process_group=0,
     )
@@ -328,7 +329,10 @@ def test_a_run_told_to_stop_ends_its_stage_and_says_where_it_stopped(project: Pr
     while not marker.exists() and time.monotonic() < deadline:
         time.sleep(0.2)
     os.killpg(started.pid, signal.SIGTERM)
-    stdout, _ = started.communicate(timeout=60)
+    stdout, stderr = started.communicate(timeout=60)
+    # A stop reaches every process of the group, and more than once: the run owes its
+    # summary however many it is told, and dies with a traceback where one escapes it.
+    assert "Traceback" not in stderr
     assert "test: the run stopped during this stage; its output so far: " in stdout
     assert last_line(stdout) == f"fix-check did not pass: interrupted test. Logs: {LOGS}"
     assert not alive(int(marker.read_text()))

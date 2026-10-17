@@ -56,6 +56,8 @@ LIMIT_VARIABLE = "PY_HARNESS_STAGE_SECONDS"
 LIMIT = 900
 LAST = "last"
 CHANGED = "changed.txt"
+# What tells a run to stop; a hangup reaches it when the terminal it runs in closes.
+STOPS = (signal.SIGTERM, signal.SIGHUP)
 STOPPED = 130
 
 
@@ -74,7 +76,7 @@ def main(argv: list[str]) -> int:
         return 2
     folder = log_folder(root, loop)
     cleared(folder)
-    for stop in (signal.SIGTERM, signal.SIGHUP):
+    for stop in STOPS:
         signal.signal(stop, interrupted)
     limit = int(os.environ.get(LIMIT_VARIABLE) or LIMIT)
     started = datetime.now(UTC).isoformat(timespec="seconds")
@@ -98,6 +100,14 @@ def main(argv: list[str]) -> int:
 
 
 def interrupted(_signal: int, _frame: FrameType | None) -> None:
+    """Raises once, then lets a run already stopping be told so again without raising.
+
+    A raise reaches whatever statement the run was on, which during the handling of the
+    first stop is the code that ends the stage and draws the summary. A second raise there
+    escapes that handling and leaves the run with nothing to show for itself.
+    """
+    for stop in STOPS:
+        signal.signal(stop, signal.SIG_IGN)
     raise StopSignalError
 
 
