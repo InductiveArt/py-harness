@@ -8,7 +8,7 @@ it.
 
 ## Install
 
-For a repository holding one project; uv workspaces are not supported yet.
+For a repository holding one project, or a uv workspace of several.
 In `pyproject.toml`, pinned to a release:
 
 ```toml
@@ -34,8 +34,8 @@ include .venv/share/py-harness/harness.mk
 Then, once per clone:
 
 ```sh
-uv sync      # make cannot read the include before .venv exists
-make agent   # gives the agent its rules and skills
+uv sync --all-packages   # make cannot read the include before .venv exists
+make agent               # gives the agent its rules and skills
 ```
 
 `make agent` links `.claude/rules/py-harness.md` and the `py-quality-tooling`
@@ -121,6 +121,13 @@ coverage always runs on the harness's.
   testpaths = ["src/test/python"]
   ```
 
+- **Workspaces.** A uv workspace is checked project by project, in the order
+  `[tool.uv.workspace] members` declares them. `make projects` lists them and
+  `make test-project PROJECT=<name>` runs one. Each project needs a `py.typed`
+  marker beside its code: a member is installed into the shared `.venv`, and a
+  type checker reads an installed package's own annotations only where that
+  file declares them. Without it, a project importing another fails `typecheck`
+  on `reportMissingTypeStubs`.
 - **Integration tests** are marked `integration`
   (`pytestmark = pytest.mark.integration`). `fix-check` leaves them out;
   `verify` runs them.
@@ -165,8 +172,9 @@ The **change gate**: a destructive command (`rm`, `git reset --hard`, a
 force-push, ...) runs only when the agent's description quotes you asking for
 it; a new file, or an edit to `pyproject.toml` or the `Makefile`, is held once
 for the agent to state the facts that bear on it; and at the end of each turn,
-git shows you every new file, deletion and wiring edit. In
-`.claude/settings.local.json`:
+git shows you every new file, deletion and wiring edit. A change is judged in
+the repository holding the file it touches, so a session run from a folder of
+clones gates each of them. In `.claude/settings.local.json`:
 
 ```json
 {
@@ -202,6 +210,14 @@ a trusted workspace. `make audit` prints every gate decision.
   unused public function.
 - Names read through `vars()`, `__dict__` or `attrgetter`, and a
   `conftest.py` hook that deselects tests.
+- Across the projects of a workspace: a stage stops at the first project that
+  fails, so the ones after it wait for the next run; `no-cycles` reads one
+  project at a time, so a cycle between two of them passes; and each project
+  reaches full coverage by its own tests, so a library covered only through
+  another project's tests fails.
+- Across repositories: a command run from a folder of clones is held rather
+  than judged, since no repository holds it, and nothing compares the harness
+  release each clone pins.
 - The change gate checks that a quote is your words, not that they ask for
   this command. It misses an untracked file deleted by a command its patterns
   do not know, and counts your own edits during a turn as the session's. In
