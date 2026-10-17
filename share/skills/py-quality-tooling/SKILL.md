@@ -102,7 +102,8 @@ Dataframes: frames in, typed values out. Operations on a frame are typed by its 
 - `fix-check` runs every test not marked `integration` (`pytestmark = pytest.mark.integration`); `verify` runs them all.
 - `verify` requires full branch coverage of the source by its own tests. `# pragma: no cover` excludes nothing; only `if TYPE_CHECKING:`, `if __name__ == "__main__":` and `@overload` are exempt. Code a test runs in a subprocess counts.
 - Each test file is imported by its path, so no test file imports another: shared test code goes in `conftest.py` fixtures.
-- Tests run in a process per core, in no order you can rely on. A test that shares what two processes cannot, such as one database or one port, names a group with `@pytest.mark.xdist_group("<what it shares>")`, and one process runs that group's tests in turn. A group orders its own tests against each other, not against the rest of the suite.
+- Tests run in a process per core, in a fresh order each run: a test passes on its own or not at all. A test that shares what two processes cannot, such as one database or one port, names a group with `@pytest.mark.xdist_group("<what it shares>")`, and one process runs that group's tests. A group keeps its tests from running at the same time; it puts them in no order, and the rest of the suite still runs beside them. Never order tests to make one pass: what it needs from another belongs in a fixture.
+- A test that fails only sometimes is a finding, not noise. The order's seed heads the stage's log, and `--randomly-seed=<it>` runs that order again.
 
 ## Setup
 
