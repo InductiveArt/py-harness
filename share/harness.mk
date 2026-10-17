@@ -9,7 +9,10 @@ HARNESS := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 # The makefile make was started from, so a run reaches these targets again the way it was
 # reached itself: included from a repository's own makefile, or named on its own.
 export PY_HARNESS_MAKEFILE := $(firstword $(MAKEFILE_LIST))
-RUN := uv run --no-sync
+# A shell with another root's environment activated says so in VIRTUAL_ENV, which uv reads
+# and then warns it is ignoring. Only one root of a repository can be the activated one, so
+# the variable is dropped rather than read: a root is run from its own environment.
+RUN := env -u VIRTUAL_ENV uv run --no-sync
 PY := $(RUN) python -m py_harness
 # Sets a stage's output off in the log, under the stage's name.
 announce = @printf '\n→ %s\n' '$@'
