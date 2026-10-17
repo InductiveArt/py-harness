@@ -61,8 +61,8 @@ def test_one_line_verdicts_stay_together_and_longer_output_is_set_off(project: P
     project.write(".py-harness/doctor/report-z.py", 'print("z1\\nz2")  # noqa: T201\n')
     stdout = project.make("doctor").stdout
     verdicts = "doctor: no-hidden-names OK\ndoctor: no-reexport OK\n\n"
-    verdicts_then_blocks = verdicts + "a1\na2\n\nb1\nb2\n\n"
-    assert verdicts_then_blocks + "doctor: shared-names none\n" in stdout
+    # Which check follows is the run order's to say, so only that one speaks on its own line.
+    assert verdicts + "a1\na2\n\nb1\nb2\n\ndoctor: " in stdout
     assert stdout.endswith("doctor: unchecked-files none\n\nz1\nz2\n")
 
 

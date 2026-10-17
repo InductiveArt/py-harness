@@ -1,3 +1,4 @@
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -604,3 +605,37 @@ def test_report_shared_names_reads_python_outside_source_and_tests(project: Proj
     project.write("scripts/two.py", "LIMIT = 2\n")
     report = project.make("doctor", "RULE=shared-names").stdout
     assert "  LIMIT  scripts/one.py:1, scripts/two.py:1\n" in report
+
+
+# #region drift-harness-version
+
+
+def pinning(tag: str) -> str:
+    source = f'py-harness = {{ git = "https://example.invalid/h", tag = "{tag}" }}'
+    return f"\n[tool.uv.sources]\n{source}\n"
+
+
+def test_harness_version_passes_when_the_release_pinned_is_the_one_running(
+    project: Project,
+) -> None:
+    running = version("py-harness")
+    project.write("pyproject.toml", manifest() + pinning(f"v{running}"))
+    result = project.make("doctor", "RULE=harness-version")
+    assert result.returncode == 0
+    assert f"doctor: harness-version OK (v{running})" in result.stdout
+
+
+def test_harness_version_fails_when_the_release_pinned_is_not_the_one_running(
+    project: Project,
+) -> None:
+    project.write("pyproject.toml", manifest() + pinning("v9.9.9"))
+    result = project.make("doctor", "RULE=harness-version")
+    assert result.returncode != 0
+    assert f"pins v9.9.9 and runs {version('py-harness')}" in result.stdout
+    assert "the release was cut without its version" in result.stdout
+
+
+def test_harness_version_holds_nothing_where_no_release_is_pinned(project: Project) -> None:
+    result = project.make("doctor", "RULE=harness-version")
+    assert result.returncode == 0
+    assert "pinned to no release" in result.stdout

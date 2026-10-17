@@ -163,6 +163,11 @@ coverage always runs on the harness's.
   projects arrive in `PY_HARNESS_PROJECTS`, one path per line, and the harness's
   folder in `PY_HARNESS_DIR`.
 - **`.py-harness/ignore`** lists projects no stage covers; every run says so.
+- **The release pinned is the release run.** Every run names the harness
+  release in force, and `drift-harness-version` fails where the `tag` in
+  `[tool.uv.sources]` is not the version installed. Whether a newer release
+  exists is not asked here: that needs the network, which no stage of this gate
+  reaches, so keep it in whatever opens your dependency updates.
 
 ## Agent gates
 
