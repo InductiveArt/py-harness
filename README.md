@@ -16,7 +16,7 @@ In `pyproject.toml`, pinned to a release:
 dev = ["py-harness"]
 
 [tool.uv.sources]
-py-harness = { git = "https://github.com/InductiveArt/py-harness", tag = "v0.1.0" }
+py-harness = { git = "https://github.com/InductiveArt/py-harness", tag = "v0.2.0" }
 
 [tool.ruff]
 extend = ".venv/share/py-harness/ruff.toml"
@@ -48,6 +48,13 @@ Releases are this repository's tags. To update, set `tag` to a newer one and
 run `uv sync`. The lockfile pins the commit a project runs, ruff and
 basedpyright with it, so nothing moves until the project updates.
 `make update` upgrades every other dependency.
+
+A release keeps nothing for the sake of what came before, which is the rule it
+holds code to: the old name goes, and its callers change in the same change. A
+setting, a target or a check that changes simply changes, and the release notes
+say which. Nothing in a repository moves until it sets a newer `tag`, so that
+is the one moment it takes a change on, and a run names the release it was held
+to. Read the notes of every release between the two before setting it.
 
 ## Use
 
