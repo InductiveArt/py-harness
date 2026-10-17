@@ -134,9 +134,6 @@ SHARED_RULES = {
     "drift-harness-version": (
         f"{RULE_TESTS}::test_harness_version_fails_when_the_release_pinned_is_not_the_one_running"
     ),
-    "report-unchecked-files": (
-        f"{RULE_TESTS}::test_report_unchecked_files_names_code_no_stage_reads"
-    ),
 }
 
 # The general notes that precede the cycle, mapped the same way.
