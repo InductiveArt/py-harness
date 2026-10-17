@@ -86,13 +86,21 @@ def test_test_skips_a_project_without_tests_and_says_so(project: Project) -> Non
     assert "·  skip test . (no tests at tests)" in result.stdout
 
 
-def test_test_stops_at_the_first_failing_project(tmp_path: Path) -> None:
+def test_a_failing_project_does_not_hide_the_ones_after_it(tmp_path: Path) -> None:
     created = wired_workspace(tmp_path, "libs/a", "libs/b")
     created.write("libs/a/tests/test_a.py", FAILING)
-    created.write("libs/b/tests/test_b.py", PASSING)
-    result = created.make("test")
+    created.write("libs/b/tests/test_b.py", FAILING)
+    target = tmp_path.parent / "test.verdict"
+    result = created.make("test", environment={VERDICT_VARIABLE: str(target)})
     assert result.returncode != 0
-    assert "→ test libs/b" not in result.stdout
+    assert "→ test libs/b" in result.stdout
+    verdict = read_verdict(target)
+    assert verdict is not None
+    assert verdict.headline == "0 passed, 2 failed"
+    assert [section.title for section in verdict.sections] == [
+        "libs/a/tests/test_a.py::test_fails",
+        "libs/b/tests/test_b.py::test_fails",
+    ]
 
 
 def test_pytest_rejects_an_unregistered_marker(project: Project) -> None:
@@ -382,16 +390,6 @@ def test_every_project_passing_is_one_pass(tmp_path: Path) -> None:
     assert read_verdict(target) == Verdict(PASSED, "2 passed, 0 failed")
 
 
-def test_the_project_a_stage_stopped_at_says_how_many_never_ran(tmp_path: Path) -> None:
-    created = wired_workspace(tmp_path / "repo", "libs/a", "libs/b")
-    created.write("libs/a/tests/test_a.py", FAILING)
-    target = tmp_path / "test.verdict"
-    created.make("test", environment={VERDICT_VARIABLE: str(target)})
-    verdict = read_verdict(target)
-    assert verdict is not None
-    assert verdict.headline == "0 passed, 1 failed; 1 project after it not run"
-
-
 def absent_checker(_project: Path | None, _harness: Path, _reports: Path) -> stage.Step:
     return stage.Run(["no-such-checker-anywhere"])
 
@@ -488,8 +486,8 @@ def test_several_projects_add_up_to_one_line(tmp_path: Path) -> None:
         return stage.Judged(Verdict(PASSED, tested.headline()), tested=tested)
 
     skipped = stage.Judged(Verdict(PASSED, "skipped coverage libs/c: no libs/c/src"))
-    verdict = stage.together([project(3, "libs/a/src"), skipped, project(2, "libs/b/src")])
-    assert verdict == Verdict(PASSED, "5 passed, 0 failed, 100% of 2 projects")
+    ran = [project(3, "libs/a/src"), skipped, project(2, "libs/b/src")]
+    assert stage.together(ran) == Verdict(PASSED, "5 passed, 0 failed, 100% of 2 projects")
 
 
 def test_a_failing_test_keeps_what_it_printed_and_logged(project: Project) -> None:

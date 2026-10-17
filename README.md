@@ -233,11 +233,10 @@ a trusted workspace. `make audit` prints every gate decision.
   unused public function.
 - Names read through `vars()`, `__dict__` or `attrgetter`, and a
   `conftest.py` hook that deselects tests.
-- Across the projects of a workspace: a stage stops at the first project that
-  fails, so the ones after it wait for the next run; `no-cycles` reads one
-  project at a time, so a cycle between two of them passes; and each project
-  reaches full coverage by its own tests, so a library covered only through
-  another project's tests fails.
+- Across the projects of a workspace: `no-cycles` reads one project at a time,
+  so a cycle between two of them passes, and each project reaches full coverage
+  by its own tests, so a library covered only through another project's tests
+  fails.
 - Across repositories: a command run from a folder of clones is held rather
   than judged, since no repository holds it, and nothing compares the harness
   release each clone pins.

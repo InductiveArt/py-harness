@@ -132,7 +132,8 @@ class Judged:
     verdict: Verdict
     # What a person running the stage alone reads, one finding per line.
     shown: list[str] = field(default_factory=list[str])
-    # What a passing test session ran, so the sessions of several projects add up to one line.
+    # What a test session ran, so the sessions of several projects add up to one line; None
+    # where what it ran is unknown, which is a session that broke or never started.
     tested: Tested | None = None
 
 
@@ -185,7 +186,7 @@ def chosen(stage: Stage, package: str | None, root: Path) -> list[Path | None] |
 
 
 def performed(name: str, stage: Stage, harness: Path, targets: list[Path | None]) -> Verdict:
-    """Runs each target in turn and stops at the first that does not pass."""
+    """Runs every target, so one run names what each of them found."""
     with tempfile.TemporaryDirectory(prefix="py-harness-") as scratch:
         # Coverage writes a data file per process. A directory private to this
         # run keeps them out of the repository and apart from any run nested in it.
@@ -198,34 +199,38 @@ def performed(name: str, stage: Stage, harness: Path, targets: list[Path | None]
             "COVERAGE_FILE": str(Path(scratch) / "coverage"),
             NESTED: "1",
         }
-        passed: list[Judged] = []
+        ran: list[Judged] = []
         for index, target in enumerate(targets):
             reports = Path(scratch) / str(index)
             reports.mkdir()
-            judged = perform(name, target, stage, harness, reports, environment)
-            if judged.verdict.outcome != PASSED:
-                left = len(targets) - index - 1
-                return stopped(judged.verdict, left) if left else judged.verdict
-            passed.append(judged)
-    return together(passed)
+            ran.append(perform(name, target, stage, harness, reports, environment))
+    return together(ran)
 
 
-def together(passed: list[Judged]) -> Verdict:
-    """One target speaks for itself; several add up the tests each one ran."""
-    if len(passed) == 1:
-        return passed[0].verdict
-    tested = [judged.tested for judged in passed if judged.tested is not None]
+def together(ran: list[Judged]) -> Verdict:
+    """One target speaks for itself; several add up what they ran and keep what each found."""
+    if len(ran) == 1:
+        return ran[0].verdict
+    tested = [judged.tested for judged in ran if judged.tested is not None]
     shares = [each.share for each in tested if each.share is not None]
     # Each project is held to its own share, so together they reach the least of them.
     least = min((share.percent for share in shares), default=None)
     share = None if least is None else Share(least, counted(len(shares), "project"))
     total = Tested(sum(each.passed for each in tested), sum(each.failed for each in tested), share)
-    return Verdict(PASSED, total.headline())
+    found = [judged.verdict for judged in ran if judged.verdict.outcome != PASSED]
+    return Verdict(PASSED, total.headline()) if not found else failing(found, total)
 
 
-def stopped(verdict: Verdict, left: int) -> Verdict:
-    headline = f"{verdict.headline}; {counted(left, 'project')} after it not run"
-    return replace(verdict, headline=headline)
+def failing(found: list[Verdict], total: Tested) -> Verdict:
+    """What every target that did not pass found, each finding already naming its own file.
+
+    Only the stages that run a project at a time reach here, and those count what they find
+    by test and by file, never by rule.
+    """
+    first = [line for verdict in found for line in verdict.first]
+    sections = [section for verdict in found for section in verdict.sections]
+    outcome = BROKEN if any(verdict.outcome == BROKEN for verdict in found) else FAILED
+    return Verdict(outcome, total.headline(), first=first[:FIRST], sections=sections)
 
 
 def perform(
@@ -336,10 +341,11 @@ def judge_tests(ran: Ran, root: Path) -> Judged:
     if problems:
         first = [f"{problem.test}: {problem.message}" for problem in problems[:FIRST]]
         sections = [Section(problem.test, problem.text.splitlines()) for problem in problems]
-        return Judged(Verdict(FAILED, tested.headline(), first=first, sections=sections))
+        failed = Verdict(FAILED, tested.headline(), first=first, sections=sections)
+        return Judged(failed, tested=tested)
     if gaps:
         first = [f"{gap.title}: {'; '.join(gap.lines)}" for gap in gaps[:FIRST]]
-        return Judged(Verdict(FAILED, tested.headline(), first=first, sections=gaps))
+        return Judged(Verdict(FAILED, tested.headline(), first=first, sections=gaps), tested=tested)
     if ran.code != CLEAN or (ran.measured is not None and share is None):
         return broke("pytest", ran)
     return Judged(Verdict(PASSED, tested.headline()), tested=tested)
