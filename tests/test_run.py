@@ -119,6 +119,28 @@ def test_a_run_reaches_its_stages_through_the_makefile_it_came_from(
     assert named_makefile() == ["-f", "harness.mk"]
 
 
+def test_a_stop_reaching_a_run_between_stages_still_draws_its_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What a signal does to a run, without the signal: a stage raising where one would.
+
+    The run this proves is otherwise reached only through a process a signal is sent to,
+    whose own account of what it ran is as racy as the signal.
+    """
+
+    def stopping(*_arguments: object) -> StageRecord:
+        raise run.StopSignalError
+
+    def unhandled(_stop: int, _handler: object) -> None:
+        """Leaves this process's own handlers where they are."""
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(signal, "signal", unhandled)
+    monkeypatch.setattr(run, "run_stage", stopping)
+    assert main(["run", "fix-check"]) == run.STOPPED
+    assert "fix-check did not pass: interrupted agent" in capsys.readouterr().out
+
+
 def test_a_run_named_on_its_own_still_reaches_its_stages(project: Project) -> None:
     """A repository answering for more than one language keeps a makefile of its own, which
     holds no stage of any of them, and names each harness where it lies.
