@@ -33,6 +33,7 @@ from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
 from py_harness.verdict import SKIPPED
+from py_harness.verdict import VERDICT_VARIABLE
 from py_harness.verdict import Section
 from py_harness.verdict import Verdict
 from py_harness.verdict import report
@@ -178,7 +179,10 @@ def performed(name: str, stage: Stage, harness: Path, targets: list[Path | None]
     with tempfile.TemporaryDirectory(prefix="py-harness-") as scratch:
         # Coverage writes a data file per process. A directory private to this
         # run keeps them out of the repository and apart from any run nested in it.
-        inherited = {key: value for key, value in os.environ.items() if key != CALLER_ARGUMENTS}
+        # This stage's verdict path is its own: a harness run that a tool of this stage starts
+        # reports its own result, and must never write over the one this stage owes.
+        withheld = (CALLER_ARGUMENTS, VERDICT_VARIABLE)
+        inherited = {key: value for key, value in os.environ.items() if key not in withheld}
         environment = {**inherited, "COVERAGE_FILE": str(Path(scratch) / "coverage")}
         passed: list[Judged] = []
         for index, target in enumerate(targets):

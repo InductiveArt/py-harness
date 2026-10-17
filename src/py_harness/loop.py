@@ -24,6 +24,7 @@ from py_harness.summary import bare
 from py_harness.summary import changed_files
 from py_harness.summary import changed_line
 from py_harness.summary import render
+from py_harness.summary import run_verdict
 from py_harness.summary import stage_lines
 from py_harness.summary import suppression_lines
 from py_harness.suppressions import recorded
@@ -34,6 +35,7 @@ from py_harness.verdict import PASSED
 from py_harness.verdict import VERDICT_VARIABLE
 from py_harness.verdict import Verdict
 from py_harness.verdict import read_verdict
+from py_harness.verdict import report
 
 # Each loop answers one question, and its name says whether it writes. `fix-check`
 # follows each change, so it fixes before it judges the change; `verify` judges all
@@ -87,15 +89,11 @@ def main(argv: list[str]) -> int:
                 out(line)
     except (KeyboardInterrupt, StopSignalError):
         cut = [running(name, folder, root) for name in stages[len(done) : len(done) + 1]]
-        record = RunRecord(loop, started, False, [*done, *cut], [])
-        write_record(folder, record)
-        closing(record, root, folder)
+        concluded(RunRecord(loop, started, False, [*done, *cut], []), root, folder)
         return STOPPED
     suppressed = suppression_lines(tally(root), recorded(root))
     footer = [*changes(before, snapshot(root), folder, root), *suppressed]
-    record = RunRecord(loop, started, True, done, footer)
-    write_record(folder, record)
-    closing(record, root, folder)
+    concluded(RunRecord(loop, started, True, done, footer), root, folder)
     return 0 if all(stage.outcome == PASSED for stage in done) else 1
 
 
@@ -216,9 +214,15 @@ def changes(before: Snapshot, after: Snapshot, folder: Path, root: Path) -> list
     return changed_line(changed, shown(listed, root))
 
 
-def closing(record: RunRecord, root: Path, folder: Path) -> None:
+def concluded(record: RunRecord, root: Path, folder: Path) -> None:
+    """Keeps the run's record, prints its summary, and hands its verdict to whatever started it.
+
+    A run started from a terminal tells no one, the same way a stage run alone does not.
+    """
+    write_record(folder, record)
     for line in summary(record, root, shown(folder, root)):
         out(line)
+    report(run_verdict(record))
 
 
 def summary(record: RunRecord, root: Path, folder: str) -> list[str]:

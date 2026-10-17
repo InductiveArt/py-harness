@@ -17,6 +17,7 @@ from py_harness.logs import StageRecord
 from py_harness.logs import log_folder
 from py_harness.logs import read_record
 from py_harness.loop import LIMIT_VARIABLE
+from py_harness.loop import LOOPS
 from py_harness.loop import decided
 from py_harness.loop import main
 from py_harness.loop import run_stage
@@ -24,6 +25,7 @@ from py_harness.loop import summary
 from py_harness.summary import bare
 from py_harness.summary import changed_files
 from py_harness.summary import render
+from py_harness.summary import run_verdict
 from py_harness.summary import stage_lines
 from py_harness.summary import suppression_lines
 from py_harness.suppressions import Suppression
@@ -32,8 +34,10 @@ from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
 from py_harness.verdict import SKIPPED
+from py_harness.verdict import VERDICT_VARIABLE
 from py_harness.verdict import Part
 from py_harness.verdict import Verdict
+from py_harness.verdict import read_verdict
 from tests.support import PASSING
 from tests.support import VENV
 from tests.support import Project
@@ -528,6 +532,46 @@ def test_a_fix_and_an_addition_of_the_same_size_are_both_told() -> None:
 def test_without_a_baseline_the_summary_counts_no_recorded_errors() -> None:
     lines = suppression_lines(NOTHING_SUPPRESSED, None)
     assert not any(line.startswith("Recorded type errors") for line in lines)
+
+
+# #region The run's own verdict
+
+
+def run_record(*stages: StageRecord, finished: bool = True) -> RunRecord:
+    return RunRecord("verify", "2026-10-05T00:00:00+00:00", finished, list(stages), [])
+
+
+@pytest.mark.parametrize(
+    ("outcomes", "expected"),
+    [
+        pytest.param([PASSED, PASSED], PASSED, id="every-stage-passed"),
+        pytest.param([PASSED, FAILED], FAILED, id="a-stage-found-something"),
+        pytest.param([FAILED, BROKEN], BROKEN, id="a-broken-stage-outranks-a-finding"),
+    ],
+)
+def test_the_runs_verdict_answers_for_every_stage(outcomes: list[str], expected: str) -> None:
+    named = [(f"s{index}", found) for index, found in enumerate(outcomes)]
+    verdict = run_verdict(run_record(*(stage(name, found) for name, found in named)))
+    assert verdict.outcome == expected
+    assert [(part.name, part.outcome) for part in verdict.parts] == named
+
+
+def test_a_run_that_never_finished_cannot_answer_for_the_code() -> None:
+    cut = run_record(stage("lint", PASSED), stage("typecheck", RUNNING), finished=False)
+    verdict = run_verdict(cut)
+    assert (verdict.outcome, verdict.headline) == (
+        BROKEN,
+        "verify did not pass: interrupted typecheck",
+    )
+
+
+def test_a_run_hands_its_verdict_to_whatever_started_it(project: Project) -> None:
+    target = project.root.parent / "run.verdict"
+    assert project.make("fix-check", environment={VERDICT_VARIABLE: str(target)}).returncode == 0
+    verdict = read_verdict(target)
+    assert verdict is not None
+    assert (verdict.outcome, verdict.headline.split(" in ")[0]) == (PASSED, "fix-check passed")
+    assert [part.name for part in verdict.parts] == list(LOOPS["fix-check"])
 
 
 # #region Stopping a stage

@@ -9,6 +9,8 @@ from py_harness.verdict import BROKEN
 from py_harness.verdict import FAILED
 from py_harness.verdict import PASSED
 from py_harness.verdict import SKIPPED
+from py_harness.verdict import Part
+from py_harness.verdict import Verdict
 
 # Path to content digest for every file git reports as modified or untracked;
 # None outside a git repository.
@@ -114,18 +116,37 @@ def tail(stage: StageRecord, root: Path) -> list[str]:
     return ["  last lines of its output:", *(f"    {line}" for line in lines[-TAIL:])]
 
 
-def verdict_line(record: RunRecord, folder: str) -> str:
-    """The run's answer, on the last line, where a reader looks first."""
+def answer(record: RunRecord) -> str:
+    """The run's answer in one line: that it passed, or which stages did not."""
     seconds = sum(stage.seconds for stage in record.stages)
     states = [(stage.name, outcome(stage)) for stage in record.stages]
     if record.finished and all(state == PASSED for _, state in states):
-        return f"{record.loop} passed in {seconds:.1f}s. Logs: {folder}"
+        return f"{record.loop} passed in {seconds:.1f}s"
     groups = [
         f"{state} {', '.join(name for name, found in states if found == state)}"
         for state in (BROKEN, FAILED, SKIPPED, INTERRUPTED)
         if any(found == state for _, found in states)
     ]
-    return f"{record.loop} did not pass: {'; '.join(groups)}. Logs: {folder}"
+    return f"{record.loop} did not pass: {'; '.join(groups)}"
+
+
+def verdict_line(record: RunRecord, folder: str) -> str:
+    """The run's answer, on the last line, where a reader looks first."""
+    return f"{answer(record)}. Logs: {folder}"
+
+
+def run_verdict(record: RunRecord) -> Verdict:
+    """The run's verdict for whatever started it, with a part for each stage it ran."""
+    parts = [Part(stage.name, outcome(stage), stage.headline) for stage in record.stages]
+    states = [part.outcome for part in parts]
+    return Verdict(run_outcome(record, states), answer(record), parts=parts)
+
+
+def run_outcome(record: RunRecord, states: list[str]) -> str:
+    """A run that did not finish, or that holds a broken stage, cannot answer for the code."""
+    if not record.finished or BROKEN in states:
+        return BROKEN
+    return PASSED if all(state == PASSED for state in states) else FAILED
 
 
 def bare(states: list[tuple[str, str]], loop: str, folder: str) -> list[str]:
