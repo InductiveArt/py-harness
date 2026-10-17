@@ -48,8 +48,15 @@ class RunRecord:
 
 
 def log_folder(root: Path, name: str) -> Path:
-    """The run's folder inside git's own, so no commit carries it; outside git, a temporary one."""
-    location = git(root, "rev-parse", "--git-path", f"{LOGS}/{name}")
+    """The run's folder inside git's own, so no commit carries it; outside git, a temporary one.
+
+    One repository holds a root wherever it has something to check, and each of them runs
+    under its own name: what leads to this root leads to its runs, so the newest run read
+    back here is one of this root's own.
+    """
+    # Empty at the repository's own root, where it leaves the folder where it has always been.
+    under = (git(root, "rev-parse", "--show-prefix") or "").strip()
+    location = git(root, "rev-parse", "--git-path", f"{LOGS}/{under}{name}")
     if location is not None:
         return root / location.strip()
     tag = hashlib.sha1(str(root.resolve()).encode(), usedforsecurity=False).hexdigest()[:8]
@@ -57,11 +64,21 @@ def log_folder(root: Path, name: str) -> Path:
 
 
 def shown(path: Path, root: Path) -> str:
-    """A path as a reader at the repository root types it."""
+    """A path as a reader at the repository root types it.
+
+    A root the repository holds below its own reaches what git keeps by climbing out of
+    itself, which is no way to read a path: the repository it climbs to is read from.
+    """
     try:
-        return path.resolve().relative_to(root.resolve()).as_posix()
+        return path.resolve().relative_to(repository(root).resolve()).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def repository(root: Path) -> Path:
+    """The repository holding this root, which is the root itself where no repository does."""
+    top = git(root, "rev-parse", "--show-toplevel")
+    return root if top is None else Path(top.strip())
 
 
 def write_record(folder: Path, record: RunRecord) -> None:

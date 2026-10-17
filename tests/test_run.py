@@ -254,6 +254,20 @@ def test_fix_check_outside_git_keeps_its_logs_in_a_temporary_folder(project: Pro
     assert (folder / "test.log").is_file()
 
 
+def test_each_root_of_a_repository_keeps_its_runs_apart(tmp_path: Path) -> None:
+    """Otherwise the root that finished last would answer for every one of them."""
+    created = Project(tmp_path)
+    created.write("apps/api/pyproject.toml")
+    created.write("libs/core/pyproject.toml")
+    created.git("init", "-q")
+    inside = tmp_path / ".git" / "py-harness" / "logs"
+    api = log_folder(tmp_path / "apps" / "api", "verify")
+    core = log_folder(tmp_path / "libs" / "core", "verify")
+    assert api.resolve() == (inside / "apps" / "api" / "verify").resolve()
+    assert core.resolve() == (inside / "libs" / "core" / "verify").resolve()
+    assert log_folder(tmp_path, "verify").resolve() == (inside / "verify").resolve()
+
+
 def test_a_tracked_file_deleted_before_the_run_does_not_break_it(project: Project) -> None:
     passing_project(project).write("src/demo/gone.py", "x = 1\n")
     project.commit()
