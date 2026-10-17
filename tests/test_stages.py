@@ -1,11 +1,9 @@
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from py_harness import stage
-from py_harness.pytest_plugin import REPORT_VARIABLE
 from py_harness.pytest_plugin import cause
 from py_harness.verdict import BROKEN
 from py_harness.verdict import PASSED
@@ -14,10 +12,8 @@ from py_harness.verdict import Verdict
 from py_harness.verdict import read_verdict
 from tests.support import PASSING
 from tests.support import SHARE
-from tests.support import VENV
 from tests.support import Project
 from tests.support import declare_layout
-from tests.support import harness_environment
 from tests.support import manifest
 
 FAILING = "def test_fails() -> None:\n    assert False\n"
@@ -109,17 +105,6 @@ def test_an_xfail_that_passes_fails(project: Project) -> None:
     assert project.make("test").returncode != 0
 
 
-@pytest.mark.parametrize("setting", ["strict", "run"])
-def test_an_xfail_that_cannot_prove_its_test_fails_is_refused(
-    project: Project, setting: str
-) -> None:
-    marker = f"import pytest\n\n\n@pytest.mark.xfail({setting}=False)\n"
-    project.write("tests/test_unit.py", marker + PASSING)
-    result = project.make("test")
-    assert result.returncode != 0
-    assert f"tests/test_unit.py::test_passes ({setting}=False)" in result.stderr + result.stdout
-
-
 def test_the_callers_pytest_arguments_are_dropped(project: Project) -> None:
     project.write("tests/test_unit.py", FAILING)
     deselecting = {"PYTEST_ADDOPTS": "--deselect tests/test_unit.py"}
@@ -146,8 +131,9 @@ def test_test_integration_runs_only_integration_tests(project: Project) -> None:
     project.write("tests/test_unit.py", FAILING)
     project.write("tests/test_slow.py", MARKED + PASSING)
     result = project.make("test-integration")
+    # The failing test is the unmarked one, so passing at all says it was left out.
     assert result.returncode == 0
-    assert "1 passed, 1 deselected" in result.stdout
+    assert "1 passed" in result.stdout
 
 
 def test_test_integration_passes_when_no_test_is_marked(project: Project) -> None:
@@ -300,6 +286,53 @@ def test_coverage_refuses_to_run_beside_a_config_it_would_ignore(project: Projec
     result = project.make("coverage")
     assert result.returncode != 0
     assert "wiring: pyproject.toml: coverage runs on the harness's configuration" in result.stderr
+
+
+# #region How many processes run the tests
+
+SERIAL_SUITE = "\n[tool.py-harness]\nworkers = 1\n"
+
+
+@pytest.mark.parametrize(
+    ("asked", "expected"),
+    [
+        pytest.param("", ["-n", "auto", "--dist", "loadgroup"], id="none-asked-is-one-per-core"),
+        pytest.param("workers = 3", ["-n", "3", "--dist", "loadgroup"], id="a-number-asked"),
+        pytest.param("workers = 1", [], id="one-keeps-the-process-that-started-them"),
+        pytest.param("workers = 0", [], id="fewer-than-one-is-one"),
+    ],
+)
+def test_a_project_says_how_many_processes_run_its_tests(
+    tmp_path: Path, asked: str, expected: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(stage.NESTED, raising=False)
+    created = Project(tmp_path)
+    declared = f"\n[tool.py-harness]\n{asked}\n" if asked else ""
+    created.write("pyproject.toml", manifest() + declared)
+    assert stage.worker_arguments(tmp_path) == expected
+
+
+def test_the_tests_run_in_a_process_per_core(project: Project) -> None:
+    project.write("tests/test_unit.py", PASSING)
+    assert "created: " in project.make("test", environment={stage.NESTED: ""}).stdout
+
+
+def test_a_suite_that_cannot_be_split_runs_where_it_started(project: Project) -> None:
+    project.write("pyproject.toml", manifest() + SERIAL_SUITE)
+    project.write("tests/test_unit.py", PASSING)
+    result = project.make("test", environment={stage.NESTED: ""})
+    assert result.returncode == 0
+    assert "created: " not in result.stdout
+
+
+def test_a_run_reached_from_inside_another_keeps_the_process_it_was_given(
+    project: Project,
+) -> None:
+    """Every run spreading over every core would multiply them by the runs below it."""
+    project.write("tests/test_unit.py", PASSING)
+    result = project.make("test", environment={stage.NESTED: "1"})
+    assert result.returncode == 0
+    assert "created: " not in result.stdout
 
 
 # #region Declared layout
@@ -473,20 +506,3 @@ def test_a_failing_test_keeps_what_it_printed_and_logged(project: Project) -> No
 def test_a_failure_without_a_marked_line_gives_its_last_line() -> None:
     assert cause("first\nlast\n", "call") == "last"
     assert cause("", "setup") == "in setup: "
-
-
-def test_an_unproven_xfail_is_refused_outside_a_stage_too(project: Project) -> None:
-    marker = "import pytest\n\n\n@pytest.mark.xfail(strict=False)\n"
-    project.write("tests/test_unit.py", marker + PASSING)
-    environment = {**harness_environment(), "PYTHONPATH": "src"}
-    environment.pop(REPORT_VARIABLE, None)
-    result = subprocess.run(
-        [str(VENV / "bin" / "pytest"), "-p", "no:cacheprovider", "tests"],
-        cwd=project.root,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == pytest.ExitCode.USAGE_ERROR
-    assert "an xfail must prove its test still fails" in result.stderr

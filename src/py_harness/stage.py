@@ -23,6 +23,7 @@ from py_harness.findings import unformatted
 from py_harness.layout import source_root
 from py_harness.layout import suite_paths
 from py_harness.layout import suite_patterns
+from py_harness.layout import test_workers
 from py_harness.projects import ProjectsError
 from py_harness.projects import normalized_name
 from py_harness.projects import project_name
@@ -50,6 +51,15 @@ PYTEST = (
 )
 # Arguments pytest takes from its caller's environment; only the harness decides which tests run.
 CALLER_ARGUMENTS = "PYTEST_ADDOPTS"
+# How many processes run a suite when a project asks for no number of its own, and the number
+# that leaves the tests in the one process that started them.
+PER_CORE = "auto"
+SERIAL = 1
+# Hands every test naming the same group to one process, which runs them in turn.
+GROUPED = "loadgroup"
+# Set for whatever a stage starts, so a run reached from inside another takes the one process
+# it was given: each run spreading over every core would multiply them by the runs below it.
+NESTED = "PY_HARNESS_NESTED"
 NOTHING_COLLECTED = 5
 # What ruff and basedpyright mean by an exit code: nothing found, or findings in their report.
 # Any other code, or a report that cannot be read, means the checker itself broke.
@@ -183,7 +193,11 @@ def performed(name: str, stage: Stage, harness: Path, targets: list[Path | None]
         # reports its own result, and must never write over the one this stage owes.
         withheld = (CALLER_ARGUMENTS, VERDICT_VARIABLE)
         inherited = {key: value for key, value in os.environ.items() if key not in withheld}
-        environment = {**inherited, "COVERAGE_FILE": str(Path(scratch) / "coverage")}
+        environment = {
+            **inherited,
+            "COVERAGE_FILE": str(Path(scratch) / "coverage"),
+            NESTED: "1",
+        }
         passed: list[Judged] = []
         for index, target in enumerate(targets):
             reports = Path(scratch) / str(index)
@@ -385,12 +399,28 @@ def plan_test_integration(project: Path | None, _harness: Path, _reports: Path) 
     return plan_suite(project, ["-m", INTEGRATION], f"no test is marked {INTEGRATION}")
 
 
+def worker_arguments(project: Path) -> list[str]:
+    """Tests run in a process per core, so each proves itself apart from the rest.
+
+    Tests that share what two processes cannot say so by naming a group, and one process runs
+    a group's tests in turn. A project whose whole suite cannot be split asks for one process
+    and takes none of these.
+    """
+    if os.environ.get(NESTED):
+        return []
+    asked = test_workers(project)
+    if asked is not None and asked <= SERIAL:
+        return []
+    return ["-n", PER_CORE if asked is None else str(asked), "--dist", GROUPED]
+
+
 def plan_suite(project: Path | None, selection: list[str], when_empty: str) -> Step:
     place = project or Path()
     suite = suite_paths(place)
     if not suite:
         return Skip(nothing_at(place))
-    return Run([*PYTEST, *posix(suite), *selection], when_empty=when_empty)
+    workers = worker_arguments(place)
+    return Run([*PYTEST, *workers, *posix(suite), *selection], when_empty=when_empty)
 
 
 def plan_coverage(project: Path | None, harness: Path, reports: Path) -> Step:
@@ -404,6 +434,7 @@ def plan_coverage(project: Path | None, harness: Path, reports: Path) -> Step:
     return Run(
         [
             *PYTEST,
+            *worker_arguments(place),
             *posix(suite),
             f"--cov={source.as_posix()}",
             f"--cov-config={(harness / 'coverage.toml').as_posix()}",

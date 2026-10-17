@@ -70,8 +70,9 @@ def test_hangs() -> None:
 """
 MARKER = "HANGING_MARKER"
 UNREADABLE_RUFF_SETTING = "[tool.ruff]\nsrc = 5\n"
-# Long enough that the stage is past starting pytest and into the test that hangs.
-LIMIT = "3"
+# Long enough that the stage is past starting pytest and into the test that hangs, with the
+# room that takes while every other test of this suite runs beside it.
+LIMIT = "10"
 
 
 def passing_project(project: Project) -> Project:

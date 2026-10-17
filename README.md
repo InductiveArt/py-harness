@@ -128,6 +128,24 @@ coverage always runs on the harness's.
   type checker reads an installed package's own annotations only where that
   file declares them. Without it, a project importing another fails `typecheck`
   on `reportMissingTypeStubs`.
+- **Tests run in a process per core**, so each proves itself apart from the rest.
+  Tests that share what two processes cannot, such as one database or one port,
+  name a group, and one process runs that group's tests in turn:
+
+  ```python
+  @pytest.mark.xdist_group("one-database")
+  def test_a_row_is_written() -> None: ...
+  ```
+
+  A group serialises its own tests against each other, not against the rest of
+  the suite. A project whose whole suite cannot be split says so once, and its
+  tests stay in the process that started them:
+
+  ```toml
+  [tool.py-harness]
+  workers = 1
+  ```
+
 - **Integration tests** are marked `integration`
   (`pytestmark = pytest.mark.integration`). `fix-check` leaves them out;
   `verify` runs them.

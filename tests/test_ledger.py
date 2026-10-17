@@ -26,7 +26,7 @@ CHECKLIST: dict[str, tuple[str, ...]] = {
         f"{PROMISE_TESTS}::test_typecheck_rejects_an_implicit_reexport",
     ),
     "ensure.no-unused-suppressions": (
-        f"{STAGE_TESTS}::test_an_xfail_that_cannot_prove_its_test_fails_is_refused",
+        f"{RULE_TESTS}::test_an_xfail_that_cannot_prove_its_test_fails_is_refused",
         f"{PROMISE_TESTS}::test_lint_enforces[no-test-ending-itself]",
         "tests/test_wiring.py::test_a_pytest_config_outside_pyproject_is_a_problem",
         "tests/test_wiring.py::test_a_pytest_setting_that_can_narrow_the_run_is_a_problem",

@@ -460,6 +460,17 @@ def test_no_blanket_exemptions_rejects(project: Project, source: str, kind: str)
     assert f"scripts/tool.py:1  {kind}" in result.stdout
 
 
+@pytest.mark.parametrize("setting", ["strict", "run"])
+def test_an_xfail_that_cannot_prove_its_test_fails_is_refused(
+    project: Project, setting: str
+) -> None:
+    marker = f"import pytest\n\n\n@pytest.mark.xfail({setting}=False)\n"
+    project.write("tests/test_unit.py", marker + "def test_passes() -> None:\n    assert True\n")
+    result = project.make("doctor", "RULE=no-blanket-exemptions")
+    assert result.returncode != 0
+    assert f"tests/test_unit.py:4  an xfail that proves nothing: `{setting}=False`" in result.stdout
+
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -469,6 +480,15 @@ def test_no_blanket_exemptions_rejects(project: Project, source: str, kind: str)
         pytest.param("x: int = 1  # type: ignore[assignment]\n", id="trailing-type-ignore"),
         pytest.param("x = 1  # noqa: E501\n", id="line-noqa"),
         pytest.param('TEXT = "# pyright: basic"\n', id="inside-a-string"),
+        pytest.param(
+            "import pytest\n\n\n@pytest.mark.xfail\ndef test_x() -> None: ...\n",
+            id="xfail-that-proves-it",
+        ),
+        pytest.param(
+            'import pytest\n\n\n@pytest.mark.xfail(reason="the parser is rewritten")\n'
+            "def test_x() -> None: ...\n",
+            id="xfail-that-says-why",
+        ),
     ],
 )
 def test_no_blanket_exemptions_accepts_line_level_suppressions(

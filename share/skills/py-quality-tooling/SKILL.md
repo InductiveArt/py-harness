@@ -102,13 +102,15 @@ Dataframes: frames in, typed values out. Operations on a frame are typed by its 
 - `fix-check` runs every test not marked `integration` (`pytestmark = pytest.mark.integration`); `verify` runs them all.
 - `verify` requires full branch coverage of the source by its own tests. `# pragma: no cover` excludes nothing; only `if TYPE_CHECKING:`, `if __name__ == "__main__":` and `@overload` are exempt. Code a test runs in a subprocess counts.
 - Each test file is imported by its path, so no test file imports another: shared test code goes in `conftest.py` fixtures.
+- Tests run in a process per core, in no order you can rely on. A test that shares what two processes cannot, such as one database or one port, names a group with `@pytest.mark.xdist_group("<what it shares>")`, and one process runs that group's tests in turn. A group orders its own tests against each other, not against the rest of the suite.
 
 ## Setup
 
 A project's settings describe its environment, never which rules run: those are the harness's, so every repository is held to one bar. A rule the project wants moves in the harness, for every repository at once, not here. `wiring` names any setting it refuses. What a project may still declare:
 
 - A stub package for an untyped library, as a dev dependency.
-- The `integration` mark on a test that needs a service.
+- The `integration` mark on a test that needs a service, and `xdist_group` on one that shares what two processes cannot.
+- `workers = 1` under `[tool.py-harness]`, when the whole suite cannot be split at all.
 - `source` under `[tool.py-harness]`, with pytest's `testpaths`, when the code is not in `src/` and the tests not in `tests/`.
 - Layers under `[tool.importlinter]`, which the doctor's `boundaries` rule enforces.
 - A check of its own in `.py-harness/doctor/`: a `rule-*.py` fails, a `report-*.py` informs.

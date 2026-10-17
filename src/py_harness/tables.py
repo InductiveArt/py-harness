@@ -46,8 +46,9 @@ def string(table: Table | None, key: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def integer(table: Table, key: str) -> int | None:
-    value = table.get(key)
+def integer(table: Table | None, key: str) -> int | None:
+    value = None if table is None else table.get(key)
+    # A boolean is an integer in Python, and no setting reading as one means the number it is.
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 

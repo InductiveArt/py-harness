@@ -7,8 +7,6 @@ import pytest
 from py_harness.verdict import write_whole
 
 INTEGRATION = "integration"
-# Either set to False ends an xfail without proving its test still fails.
-UNPROVEN_XFAIL = ("strict", "run")
 # A stage names the file the session reports to; a session started any other way reports nothing.
 REPORT_VARIABLE = "PY_HARNESS_TEST_REPORT"
 RECORDER = "py-harness-recorder"
@@ -64,23 +62,7 @@ def pytest_configure(config: pytest.Config) -> None:
         f"{INTEGRATION}: needs more than its own project; runs in test-integration, not in test",
     )
     target = os.environ.get(REPORT_VARIABLE)
-    if target:
+    # Every process a run is spread over reports to the one that started them, which sees them
+    # all; one of those processes recording as well would leave only its own share on the way out.
+    if target and not hasattr(config, "workerinput"):
         config.pluginmanager.register(Recorder(Path(target)), RECORDER)
-
-
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    unproven = [
-        (item.nodeid, key)
-        for item in items
-        for marker in item.iter_markers("xfail")
-        for key in UNPROVEN_XFAIL
-        if marker.kwargs.get(key) is False
-    ]
-    if not unproven:
-        return
-    recorder = config.pluginmanager.get_plugin(RECORDER)
-    if isinstance(recorder, Recorder):
-        for test, key in unproven:
-            recorder.add(test, f"an xfail must prove its test still fails; drop {key}=False", "")
-    listed = ", ".join(f"{test} ({key}=False)" for test, key in unproven)
-    raise pytest.UsageError(f"an xfail must prove its test still fails; set neither: {listed}")

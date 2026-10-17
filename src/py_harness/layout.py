@@ -1,12 +1,23 @@
 from pathlib import Path
 
 from py_harness.projects import read_manifest
+from py_harness.tables import integer
 from py_harness.tables import string
 from py_harness.tables import string_list
 from py_harness.tables import subtable
 
 DEFAULT_SOURCE = "src"
 DEFAULT_TESTS = "tests"
+
+
+def test_workers(project: Path) -> int | None:
+    """How many processes a project's tests run in, from its `[tool.py-harness] workers`;
+    None where it asks for none, leaving the count to the harness.
+
+    A suite whose tests share what two processes cannot, such as one database, asks for 1.
+    """
+    settings = subtable(read_manifest(project), "tool", "py-harness")
+    return integer(settings, "workers")
 
 
 def source_root(project: Path) -> Path:
