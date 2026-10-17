@@ -37,7 +37,7 @@ from py_harness.verdict import Verdict
 from py_harness.verdict import read_verdict
 from py_harness.verdict import report
 
-# Each loop answers one question, and its name says whether it writes. `fix-check`
+# Each run answers one question, and its name says whether it writes. `fix-check`
 # follows each change, so it fixes before it judges the change; `verify` judges all
 # of the code as it stands, so it never fixes code and fails on what a fix would have
 # repaired. Fixes run before any check, since removing an import changes the graph
@@ -46,7 +46,7 @@ from py_harness.verdict import report
 # every failing stage.
 FIXES = ("lint-fix", "format-fix")
 CHECKS = ("format", "lint", "typecheck", "doctor")
-LOOPS: dict[str, tuple[str, ...]] = {
+RUNS: dict[str, tuple[str, ...]] = {
     "fix-check": ("agent", "wiring", *FIXES, *CHECKS, "test"),
     "verify": ("install", "agent", "wiring", *CHECKS, "coverage"),
 }
@@ -66,15 +66,15 @@ class StopSignalError(Exception):
 
 
 def main(argv: list[str]) -> int:
-    loop = argv[1] if len(argv) > 1 else ""
+    run = argv[1] if len(argv) > 1 else ""
     root = Path.cwd()
-    if loop == LAST:
+    if run == LAST:
         return last(root)
-    stages = LOOPS.get(loop)
+    stages = RUNS.get(run)
     if stages is None:
-        err(f"usage: python -m py_harness.loop {'|'.join([*LOOPS, LAST])}")
+        err(f"usage: python -m py_harness.run {'|'.join([*RUNS, LAST])}")
         return 2
-    folder = log_folder(root, loop)
+    folder = log_folder(root, run)
     cleared(folder)
     for stop in STOPS:
         signal.signal(stop, interrupted)
@@ -85,17 +85,17 @@ def main(argv: list[str]) -> int:
     try:
         for name in stages:
             now = [*done, running(name, folder, root)]
-            write_record(folder, RunRecord(loop, started, False, now, []))
+            write_record(folder, RunRecord(run, started, False, now, []))
             done.append(run_stage(name, folder, root, limit))
             for line in stage_lines(done[-1]):
                 out(line)
     except (KeyboardInterrupt, StopSignalError):
         cut = [running(name, folder, root) for name in stages[len(done) : len(done) + 1]]
-        concluded(RunRecord(loop, started, False, [*done, *cut], []), root, folder)
+        concluded(RunRecord(run, started, False, [*done, *cut], []), root, folder)
         return STOPPED
     suppressed = suppression_lines(tally(root), recorded(root))
     footer = [*changes(before, snapshot(root), folder, root), *suppressed]
-    concluded(RunRecord(loop, started, True, done, footer), root, folder)
+    concluded(RunRecord(run, started, True, done, footer), root, folder)
     return 0 if all(stage.outcome == PASSED for stage in done) else 1
 
 
@@ -112,7 +112,7 @@ def interrupted(_signal: int, _frame: FrameType | None) -> None:
 
 
 def cleared(folder: Path) -> None:
-    """Empties the loop's folder, so nothing in it predates this run."""
+    """Empties the run's folder, so nothing in it predates this one."""
     folder.mkdir(parents=True, exist_ok=True)
     for leftover in folder.iterdir():
         if leftover.is_file():
@@ -241,15 +241,15 @@ def summary(record: RunRecord, root: Path, folder: str) -> list[str]:
         return render(record, root, folder, table=False)
     # Whatever went wrong drawing it, the run still owes its verdict.
     except Exception:  # noqa: BLE001
-        return bare([(stage.name, stage.outcome) for stage in record.stages], record.loop, folder)
+        return bare([(stage.name, stage.outcome) for stage in record.stages], record.name, folder)
 
 
 def last(root: Path) -> int:
-    """The newest run of any loop, drawn again from its record without running anything."""
+    """The newest run of any kind, drawn again from its record without running anything."""
     found = [
         (folder, record)
-        for loop in LOOPS
-        if (record := read_record(folder := log_folder(root, loop))) is not None
+        for run in RUNS
+        if (record := read_record(folder := log_folder(root, run))) is not None
     ]
     if not found:
         out("No fix-check or verify run is recorded in this clone yet.")

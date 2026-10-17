@@ -48,7 +48,7 @@ exhaustive = true
 layers = [
     "stop_gate",
     "change_gate",
-    "loop",
+    "run",
     "stage : doctor : summary : agent : baseline : audit : guard",
     "logs : rules",
     "findings : layout : suppressions : pytest_plugin",

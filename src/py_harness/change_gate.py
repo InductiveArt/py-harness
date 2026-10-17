@@ -11,7 +11,7 @@ from py_harness.audit import entries
 from py_harness.audit import record
 from py_harness.audit import trail
 from py_harness.console import err
-from py_harness.loop import digest
+from py_harness.run import digest
 from py_harness.suppressions import git
 from py_harness.transcript import UNVERIFIED
 from py_harness.transcript import Event

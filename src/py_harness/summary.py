@@ -121,13 +121,13 @@ def answer(record: RunRecord) -> str:
     seconds = sum(stage.seconds for stage in record.stages)
     states = [(stage.name, outcome(stage)) for stage in record.stages]
     if record.finished and all(state == PASSED for _, state in states):
-        return f"{record.loop} passed in {seconds:.1f}s"
+        return f"{record.name} passed in {seconds:.1f}s"
     groups = [
         f"{state} {', '.join(name for name, found in states if found == state)}"
         for state in (BROKEN, FAILED, SKIPPED, INTERRUPTED)
         if any(found == state for _, found in states)
     ]
-    return f"{record.loop} did not pass: {'; '.join(groups)}"
+    return f"{record.name} did not pass: {'; '.join(groups)}"
 
 
 def verdict_line(record: RunRecord, folder: str) -> str:
@@ -149,10 +149,10 @@ def run_outcome(record: RunRecord, states: list[str]) -> str:
     return PASSED if all(state == PASSED for state in states) else FAILED
 
 
-def bare(states: list[tuple[str, str]], loop: str, folder: str) -> list[str]:
+def bare(states: list[tuple[str, str]], run: str, folder: str) -> list[str]:
     """What the run can still say when its summary cannot be drawn: each stage, and the logs."""
     passed = all(state == PASSED for _, state in states)
-    verdict = f"{loop} {'passed' if passed else 'did not pass'}. Logs: {folder}"
+    verdict = f"{run} {'passed' if passed else 'did not pass'}. Logs: {folder}"
     return [*(f"  {name} {state}" for name, state in states), "", verdict]
 
 

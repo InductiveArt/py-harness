@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from py_harness import agent
-from py_harness.loop import LOOPS
+from py_harness.run import RUNS
 from tests.support import SHARE
 from tests.support import Project
 
@@ -79,6 +79,6 @@ def test_agent_outside_git_still_links(tmp_path: Path, monkeypatch: pytest.Monke
     assert (tmp_path / ".claude" / "rules" / "py-harness.md").is_symlink()
 
 
-def test_each_loop_links_the_agent_layer_before_it_judges() -> None:
-    assert LOOPS["fix-check"][0] == "agent"
-    assert LOOPS["verify"][:2] == ("install", "agent")
+def test_each_run_links_the_agent_layer_before_it_judges() -> None:
+    assert RUNS["fix-check"][0] == "agent"
+    assert RUNS["verify"][:2] == ("install", "agent")

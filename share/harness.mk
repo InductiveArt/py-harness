@@ -129,11 +129,11 @@ required_project = $(if $(PROJECT),$(PROJECT),$(error PROJECT=<project name> is 
 # #region Composed
 
 fix-check:
-	@$(PY).loop fix-check
+	@$(PY).run fix-check
 verify:
-	@$(PY).loop verify
+	@$(PY).run verify
 last:
-	@$(PY).loop last
+	@$(PY).run last
 
 doctor:
 	$(announce)

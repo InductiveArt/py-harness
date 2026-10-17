@@ -171,6 +171,6 @@ def test_a_run_record_reads_back_whole(tmp_path: Path) -> None:
     assert read_record(tmp_path) == record
 
 
-def test_a_run_record_without_its_loop_reads_as_none(tmp_path: Path) -> None:
+def test_a_run_record_without_its_name_reads_as_none(tmp_path: Path) -> None:
     (tmp_path / "run.json").write_text('{"stages": []}')
     assert read_record(tmp_path) is None

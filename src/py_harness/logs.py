@@ -39,7 +39,7 @@ class StageRecord:
 
 @dataclass(frozen=True)
 class RunRecord:
-    loop: str
+    name: str
     started: str
     finished: bool
     stages: list[StageRecord]
@@ -47,13 +47,13 @@ class RunRecord:
     footer: list[str]
 
 
-def log_folder(root: Path, loop: str) -> Path:
-    """The loop's folder inside git's own, so no commit carries it; outside git, a temporary one."""
-    location = git(root, "rev-parse", "--git-path", f"{LOGS}/{loop}")
+def log_folder(root: Path, name: str) -> Path:
+    """The run's folder inside git's own, so no commit carries it; outside git, a temporary one."""
+    location = git(root, "rev-parse", "--git-path", f"{LOGS}/{name}")
     if location is not None:
         return root / location.strip()
     tag = hashlib.sha1(str(root.resolve()).encode(), usedforsecurity=False).hexdigest()[:8]
-    return Path(tempfile.gettempdir()) / f"py-harness-{root.resolve().name}-{tag}" / loop
+    return Path(tempfile.gettempdir()) / f"py-harness-{root.resolve().name}-{tag}" / name
 
 
 def shown(path: Path, root: Path) -> str:
@@ -73,12 +73,12 @@ def read_record(folder: Path) -> RunRecord | None:
         table = as_table(decoded((folder / RECORD).read_text(encoding="utf-8")))
     except OSError:
         return None
-    loop, started = string(table, "loop"), string(table, "started")
-    if loop is None or started is None:
+    name, started = string(table, "name"), string(table, "started")
+    if name is None or started is None:
         return None
     stages = [stage_record(as_table(item)) for item in as_list(table.get("stages"))]
     finished = table.get("finished") is True
-    return RunRecord(loop, started, finished, stages, string_list(table, "footer"))
+    return RunRecord(name, started, finished, stages, string_list(table, "footer"))
 
 
 def stage_record(table: Table) -> StageRecord:

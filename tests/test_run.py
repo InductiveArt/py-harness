@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from py_harness import loop
+from py_harness import run
 from py_harness.doctor import check_name
 from py_harness.doctor import discover
 from py_harness.logs import RUNNING
@@ -16,12 +16,12 @@ from py_harness.logs import RunRecord
 from py_harness.logs import StageRecord
 from py_harness.logs import log_folder
 from py_harness.logs import read_record
-from py_harness.loop import LIMIT_VARIABLE
-from py_harness.loop import LOOPS
-from py_harness.loop import decided
-from py_harness.loop import main
-from py_harness.loop import run_stage
-from py_harness.loop import summary
+from py_harness.run import LIMIT_VARIABLE
+from py_harness.run import RUNS
+from py_harness.run import decided
+from py_harness.run import main
+from py_harness.run import run_stage
+from py_harness.run import summary
 from py_harness.summary import bare
 from py_harness.summary import changed_files
 from py_harness.summary import render
@@ -108,7 +108,7 @@ def test_fix_check_passes_a_clean_project(project: Project) -> None:
 def test_fix_check_prints_one_line_per_stage_and_per_doctor_check(project: Project) -> None:
     stdout = passing_project(project).make("fix-check").stdout
     named = [line.split()[0] for line in stdout.splitlines() if re.match(r"  \S", line)]
-    assert named == list(loop.LOOPS["fix-check"])
+    assert named == list(run.RUNS["fix-check"])
     checks = [line.split()[0] for line in stdout.splitlines() if re.match(r"    \S", line)]
     assert checks == [check_name(check) for check in discover(project.root)]
 
@@ -243,8 +243,8 @@ def test_a_run_clears_what_an_earlier_run_left(project: Project) -> None:
 
 
 def test_an_unknown_mode_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["loop", "nightly"]) == 2
-    assert "usage: python -m py_harness.loop fix-check|verify|last" in capsys.readouterr().err
+    assert main(["run", "nightly"]) == 2
+    assert "usage: python -m py_harness.run fix-check|verify|last" in capsys.readouterr().err
 
 
 def test_wiring_problems_skip_the_stages_that_need_the_wiring(project: Project) -> None:
@@ -444,7 +444,7 @@ def test_the_summary_falls_back_to_each_stage_and_the_logs(
     def failing_drawing(*_arguments: object, **_keywords: object) -> list[str]:
         raise ValueError
 
-    monkeypatch.setattr(loop, "render", failing_drawing)
+    monkeypatch.setattr(run, "render", failing_drawing)
     record = RunRecord("fix-check", "2026-10-05T00:00:00+00:00", True, [stage()], [])
     assert summary(record, Path(), LOGS) == bare([("lint", FAILED)], "fix-check", LOGS)
 
@@ -455,7 +455,7 @@ def test_the_fallback_still_says_when_every_stage_passed() -> None:
 
 def test_the_summary_admits_it_cannot_see_modifications_outside_git(tmp_path: Path) -> None:
     unknown = "Files changed during the run: unknown outside a git repository"
-    assert unknown in loop.changes(None, None, tmp_path, tmp_path)
+    assert unknown in run.changes(None, None, tmp_path, tmp_path)
 
 
 def test_the_summary_lists_a_file_a_fix_reverted() -> None:
@@ -465,14 +465,14 @@ def test_the_summary_lists_a_file_a_fix_reverted() -> None:
 def test_the_summary_names_a_few_changed_files_on_one_line(tmp_path: Path) -> None:
     after = {"src/a.py": "new", "src/b.py": "new"}
     line = "Files changed during the run (2): src/a.py, src/b.py"
-    assert line in loop.changes({}, after, tmp_path, tmp_path)
+    assert line in run.changes({}, after, tmp_path, tmp_path)
 
 
 def test_the_summary_points_at_the_full_list_of_many_changed_files(tmp_path: Path) -> None:
     after = {f"src/{n:02}.py": "new" for n in range(12)}
     line = "Files changed during the run (12): all of them: changed.txt"
-    assert line in loop.changes({}, after, tmp_path, tmp_path)
-    assert (tmp_path / loop.CHANGED).read_text().splitlines() == sorted(after)
+    assert line in run.changes({}, after, tmp_path, tmp_path)
+    assert (tmp_path / run.CHANGED).read_text().splitlines() == sorted(after)
 
 
 def suppression(line: int, label: str) -> Suppression:
@@ -575,7 +575,7 @@ def test_a_run_hands_its_verdict_to_whatever_started_it(project: Project) -> Non
     verdict = read_verdict(target)
     assert verdict is not None
     assert (verdict.outcome, verdict.headline.split(" in ")[0]) == (PASSED, "fix-check passed")
-    assert [part.name for part in verdict.parts] == list(LOOPS["fix-check"])
+    assert [part.name for part in verdict.parts] == list(RUNS["fix-check"])
 
 
 # #region Stopping a stage
@@ -583,11 +583,11 @@ def test_a_run_hands_its_verdict_to_whatever_started_it(project: Project) -> Non
 
 def test_a_stop_signal_ends_the_stage_and_all_it_started() -> None:
     process = subprocess.Popen(["sleep", "30"], process_group=0)  # noqa: S607
-    previous = signal.signal(signal.SIGALRM, loop.interrupted)
+    previous = signal.signal(signal.SIGALRM, run.interrupted)
     signal.setitimer(signal.ITIMER_REAL, 0.3)
     try:
-        with pytest.raises(loop.StopSignalError):
-            loop.waited(process, 30)
+        with pytest.raises(run.StopSignalError):
+            run.waited(process, 30)
     finally:
         signal.signal(signal.SIGALRM, previous)
     assert process.returncode == -signal.SIGKILL
@@ -596,5 +596,5 @@ def test_a_stop_signal_ends_the_stage_and_all_it_started() -> None:
 def test_a_run_clears_only_files_from_its_folder(tmp_path: Path) -> None:
     (tmp_path / "old.log").write_text("old")
     (tmp_path / "kept").mkdir()
-    loop.cleared(tmp_path)
+    run.cleared(tmp_path)
     assert [path.name for path in tmp_path.iterdir()] == ["kept"]

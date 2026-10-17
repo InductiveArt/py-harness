@@ -19,7 +19,7 @@ from py_harness.console import out
 from py_harness.logs import log_folder
 from py_harness.logs import read_record
 from py_harness.logs import shown
-from py_harness.loop import snapshot
+from py_harness.run import snapshot
 from py_harness.summary import verdict_line
 from py_harness.transcript import text
 
