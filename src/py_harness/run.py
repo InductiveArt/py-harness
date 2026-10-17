@@ -53,6 +53,8 @@ RUNS: dict[str, tuple[str, ...]] = {
 # Stages that hand the run a verdict; the others are judged by their exit code alone.
 REPORTING = frozenset({*FIXES, *CHECKS, "test", "coverage"})
 LIMIT_VARIABLE = "PY_HARNESS_STAGE_SECONDS"
+# The makefile holding the stages, as make was started from it.
+MAKEFILE_VARIABLE = "PY_HARNESS_MAKEFILE"
 LIMIT = 900
 LAST = "last"
 CHANGED = "changed.txt"
@@ -124,6 +126,16 @@ def running(name: str, folder: Path, root: Path) -> StageRecord:
     return StageRecord(name, RUNNING, 0.0, "", {}, [], log, None, [])
 
 
+def named_makefile() -> list[str]:
+    """Names the makefile this run was started from, so a stage is reached the same way.
+
+    A repository whose own makefile answers for more than one language names each harness
+    on its own; nothing is named where make found the stages on its own.
+    """
+    makefile = os.environ.get(MAKEFILE_VARIABLE)
+    return [] if makefile is None else ["-f", makefile]
+
+
 def run_stage(name: str, folder: Path, root: Path, limit: int) -> StageRecord:
     """Runs one stage in its own process group, its output written straight to its log."""
     log = folder / f"{name}.log"
@@ -134,7 +146,7 @@ def run_stage(name: str, folder: Path, root: Path, limit: int) -> StageRecord:
     started = time.monotonic()
     with log.open("w", encoding="utf-8") as sink:
         process = subprocess.Popen(
-            ["make", "-s", name],  # noqa: S607
+            ["make", "-s", *named_makefile(), name],  # noqa: S607
             stdout=sink,
             stderr=subprocess.STDOUT,
             env=environment,

@@ -6,6 +6,9 @@
 # the one variable below locates both.
 
 HARNESS := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
+# The makefile make was started from, so a run reaches these targets again the way it was
+# reached itself: included from a repository's own makefile, or named on its own.
+export PY_HARNESS_MAKEFILE := $(firstword $(MAKEFILE_LIST))
 RUN := uv run --no-sync
 PY := $(RUN) python -m py_harness
 # Sets a stage's output off in the log, under the stage's name.

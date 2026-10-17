@@ -17,9 +17,11 @@ from py_harness.logs import StageRecord
 from py_harness.logs import log_folder
 from py_harness.logs import read_record
 from py_harness.run import LIMIT_VARIABLE
+from py_harness.run import MAKEFILE_VARIABLE
 from py_harness.run import RUNS
 from py_harness.run import decided
 from py_harness.run import main
+from py_harness.run import named_makefile
 from py_harness.run import run_stage
 from py_harness.run import summary
 from py_harness.summary import bare
@@ -39,6 +41,7 @@ from py_harness.verdict import Part
 from py_harness.verdict import Verdict
 from py_harness.verdict import read_verdict
 from tests.support import PASSING
+from tests.support import SHARE
 from tests.support import VENV
 from tests.support import Project
 from tests.support import harness_environment
@@ -105,6 +108,26 @@ def test_fix_check_passes_a_clean_project(project: Project) -> None:
     assert result.returncode == 0
     assert last_line(result.stdout).startswith("fix-check passed in ")
     assert last_line(result.stdout).endswith(f"s. Logs: {LOGS}")
+
+
+def test_a_run_reaches_its_stages_through_the_makefile_it_came_from(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(MAKEFILE_VARIABLE, raising=False)
+    assert named_makefile() == []
+    monkeypatch.setenv(MAKEFILE_VARIABLE, "harness.mk")
+    assert named_makefile() == ["-f", "harness.mk"]
+
+
+def test_a_run_named_on_its_own_still_reaches_its_stages(project: Project) -> None:
+    """A repository answering for more than one language keeps a makefile of its own, which
+    holds no stage of any of them, and names each harness where it lies.
+    """
+    passing_project(project)
+    project.write("Makefile", 'check:\n\t@echo "answers for more than one language"\n')
+    result = project.make("-f", str(SHARE / "harness.mk"), "fix-check")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert last_line(result.stdout).startswith("fix-check passed in ")
 
 
 def test_fix_check_prints_one_line_per_stage_and_per_doctor_check(project: Project) -> None:
