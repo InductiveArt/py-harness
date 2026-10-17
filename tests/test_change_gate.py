@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from py_harness.audit import entries
+from py_harness.change_gate import repositories_below
 from py_harness.change_gate import tree
 from tests.support import QUOTE
 from tests.support import Project
@@ -228,6 +229,56 @@ def test_the_tree_of_a_project_below_the_repository_root(tmp_path: Path) -> None
     assert found is not None
     assert sorted(found) == ["src/app.py", "src/new.py"]
     assert [state for state in found.values() if state.endswith("absent")] == []
+
+
+# #region A folder holding clones side by side
+
+
+def clone(root: Path, name: str) -> Project:
+    """One repository of a folder that holds several of them side by side."""
+    created = Project(root / name)
+    created.write("src/app.py", "x = 1\n")
+    created.git("init", "-q")
+    created.commit()
+    return created
+
+
+def test_a_file_is_judged_in_the_repository_holding_it(tmp_path: Path) -> None:
+    """A folder of clones is itself no repository; the file names the one that holds it."""
+    created = clone(tmp_path, "svc-a")
+    assert hook(tmp_path, call("Write", file_path="svc-a/src/new.py")).returncode == HELD
+    assert [entry["target"] for entry in entries(created.root)] == ["src/new.py"]
+
+
+def test_a_file_in_a_folder_that_does_not_exist_yet_still_names_its_repository(
+    tmp_path: Path,
+) -> None:
+    created = clone(tmp_path, "svc-a")
+    held = hook(tmp_path, call("Write", file_path="svc-a/src/deep/down/new.py"))
+    assert held.returncode == HELD
+    assert [entry["target"] for entry in entries(created.root)] == ["src/deep/down/new.py"]
+
+
+def test_a_destructive_command_no_repository_holds_is_held(tmp_path: Path) -> None:
+    clone(tmp_path, "svc-a")
+    held = hook(tmp_path, call("Bash", command="rm -rf svc-a/src"))
+    assert held.returncode == HELD
+    assert "no repository holds this directory, and repositories lie below it" in held.stderr
+    assert "Run it from inside the repository it affects" in held.stderr
+
+
+def test_a_clone_one_grouping_folder_deep_is_still_found(tmp_path: Path) -> None:
+    clone(tmp_path / "backend", "svc-a")
+    assert hook(tmp_path, call("Bash", command="rm -rf backend/svc-a")).returncode == HELD
+
+
+def test_a_destructive_command_with_no_repository_below_passes(tmp_path: Path) -> None:
+    (tmp_path / "notes").mkdir()
+    assert hook(tmp_path, call("Bash", command="rm -rf notes")).returncode == 0
+
+
+def test_a_working_directory_that_is_not_one_holds_no_repository(tmp_path: Path) -> None:
+    assert repositories_below(tmp_path / "notes.txt") is False
 
 
 # #region Audit

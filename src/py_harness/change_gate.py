@@ -52,7 +52,11 @@ FACTS = {
 }
 UNQUOTED = "its description quotes nothing the user said"
 NO_TRANSCRIPT = "no transcript shows what the user said"
+UNOWNED = "no repository holds this directory, and repositories lie below it"
 STARTING_TREES = "starting-trees"
+# How far below a directory a repository is looked for: clones are kept side by side, or
+# one grouping folder deep.
+REPOSITORY_DEPTH = 2
 
 
 @dataclass(frozen=True)
@@ -62,68 +66,102 @@ class Change:
     target: str
     # The change as the user reads it: creating, editing or deleting a file, or running a command.
     doing: str
+    # The repository the change is recorded in and judged against; None when none holds it.
+    root: Path | None
 
 
 def main() -> int:
     # The client sends each hook event as a JSON object.
     payload = cast("dict[str, object]", json.loads(sys.stdin.read() or "{}"))
-    root = Path(text(payload, "cwd") or Path.cwd())
+    cwd = Path(text(payload, "cwd") or Path.cwd())
     arguments = cast("dict[str, object]", payload.get("tool_input") or {})
     session = text(payload, "session_id") or "unknown"
-    remember(root, session)
+    remember(cwd, session)
     described = " ".join(text(arguments, field) for field in DESCRIBING)
-    pending = changes(text(payload, "tool_name"), arguments, root)
-    held = [change for change in pending if not allowed(root, session, change, described, payload)]
+    pending = changes(text(payload, "tool_name"), arguments, cwd)
+    held = [change for change in pending if not allowed(cwd, session, change, described, payload)]
     return KEEP_WORKING if held else 0
 
 
-def changes(tool: str, arguments: dict[str, object], root: Path) -> list[Change]:
+def changes(tool: str, arguments: dict[str, object], cwd: Path) -> list[Change]:
     if tool in SHELL:
         command = " ".join(text(arguments, "command").split())
-        destructive = any(pattern.search(command) for pattern in DESTRUCTIVE)
+        if not any(pattern.search(command) for pattern in DESTRUCTIVE):
+            return []
         shown = command[:200]
-        return [Change("destructive", shown, f"running `{shown}`")] if destructive else []
+        return [Change("destructive", shown, f"running `{shown}`", repository(cwd))]
     if tool == PATCHING:
         patched = PATCHED_FILE.finditer(text(arguments, "input"))
         return [
-            found
-            for match in patched
-            for found in file_change(root, match["action"], match["path"])
+            found for match in patched for found in file_change(cwd, match["action"], match["path"])
         ]
     path = text(arguments, "file_path") or text(arguments, "filePath") or text(arguments, "path")
     if tool not in EDITING or not path:
         return []
-    return file_change(root, "Add" if tool in CREATING else "Update", path)
+    return file_change(cwd, "Add" if tool in CREATING else "Update", path)
 
 
-def file_change(root: Path, action: str, path: str) -> list[Change]:
-    relative = Path(os.path.relpath(Path(root, path), root)).as_posix()
-    overwriting = action == "Add" and (root / relative).exists()
-    return judged("Update" if overwriting else action, relative)
+def file_change(cwd: Path, action: str, path: str) -> list[Change]:
+    """The change an action on a file makes, in the paths of the repository holding the file.
+
+    The file names the repository, so a change is judged where it lands rather than where the
+    session happens to run. A file no repository holds leaves nothing to record it against.
+    """
+    located = Path(cwd, path)
+    root = repository(located.parent)
+    if root is None:
+        return []
+    relative = Path(os.path.relpath(located, root)).as_posix()
+    overwriting = action == "Add" and located.exists()
+    return judged(root, "Update" if overwriting else action, relative)
 
 
-def judged(action: str, relative: str) -> list[Change]:
+def judged(root: Path, action: str, relative: str) -> list[Change]:
     """The change an action on a file makes, of the kinds the gates cover."""
     if action == "Delete":
-        return [Change("destructive", relative, f"deleting {relative}")]
+        return [Change("destructive", relative, f"deleting {relative}", root)]
     if action == "Add":
-        return [Change("new file", relative, f"creating {relative}")]
+        return [Change("new file", relative, f"creating {relative}", root)]
     if Path(relative).name in WIRING:
-        return [Change("wiring", relative, f"editing {relative}")]
+        return [Change("wiring", relative, f"editing {relative}", root)]
     return []
 
 
+def repository(start: Path) -> Path | None:
+    """The root of the repository holding this path, or None when none does.
+
+    A file being created has no directory of its own yet, so the nearest one that exists
+    answers for it; every path reaches one by walking up.
+    """
+    existing = start
+    while not existing.is_dir():
+        existing = existing.parent
+    found = git(existing, "rev-parse", "--show-toplevel")
+    return None if found is None else Path(found.strip())
+
+
+def repositories_below(cwd: Path, depth: int = REPOSITORY_DEPTH) -> bool:
+    """Whether a repository lies below this directory, at the depths clones are kept at."""
+    try:
+        folders = [path for path in cwd.iterdir() if path.is_dir() and path.name[:1] != "."]
+    except OSError:
+        return False
+    if any((folder / ".git").exists() for folder in folders):
+        return True
+    return depth > 1 and any(repositories_below(folder, depth - 1) for folder in folders)
+
+
 def allowed(
-    root: Path, session: str, change: Change, described: str, payload: dict[str, object]
+    cwd: Path, session: str, change: Change, described: str, payload: dict[str, object]
 ) -> bool:
     """Lets a destructive change through on the user's own words, any other once it was held.
 
     The one hold of any other change asks the agent for the facts that bear on it, so they
-    stand in its context as it makes the change. Outside git there is no trail, so nothing
-    is held.
+    stand in its context as it makes the change.
     """
-    if trail(root) is None:
-        return True
+    root = change.root
+    if root is None:
+        return unowned(cwd, change)
     entry = identity("change-gate", session, change)
     last = latest(entries(root), entry)
     if change.trigger == "destructive":
@@ -135,6 +173,19 @@ def allowed(
     record(root, {**entry, "decision": "held"})
     err(f"py-harness change gate: before {change.doing}, present these facts:")
     err(f"{FACTS[change.trigger]}. Then make the same change again.")
+    return False
+
+
+def unowned(cwd: Path, change: Change) -> bool:
+    """A change no repository holds, which is a command, since a file names its own.
+
+    Where repositories lie below, the command can reach into any of them with nothing to
+    record it against, so it is held; where none does, there is nothing to hold it for.
+    """
+    if not repositories_below(cwd):
+        return True
+    err(f"py-harness change gate: {change.doing} is held: {UNOWNED}.")
+    err("Run it from inside the repository it affects, where the gate can record it.")
     return False
 
 

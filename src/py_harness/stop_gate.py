@@ -104,7 +104,7 @@ def outcome(root: Path, session: str) -> list[tuple[Change, str]]:
         (change, state)
         for relative, state in now.items()
         if before.get(relative) != state
-        for change in judged(since(state.split(" ")[0], relative in before), relative)
+        for change in judged(root, since(state.split(" ")[0], relative in before), relative)
     ]
 
 
